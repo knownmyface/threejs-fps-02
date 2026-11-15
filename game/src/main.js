@@ -7,7 +7,7 @@ import { PALETTE } from './palette.js';
 import { createWorld } from './world.js';
 import { createInput } from './input.js';
 import { createMover } from './mover.js';
-import { createArsenal, createGrenades, WEAPONS, GRENADE_PRICE, ARMOR_PRICE } from './weapons.js';
+import { createArsenal, createGrenades, createSmoke, WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE } from './weapons.js';
 import { createBots } from './bots.js';
 import { createMatch, BUY_SECONDS, ROUND_SECONDS, PLANT_SECONDS } from './rounds.js';
 import { createHud } from './hud.js';
@@ -71,6 +71,11 @@ let buyOpen = false;
 let plantHold = 0;
 let shake = 0;
 let spectateBot = null;
+let bloom = 0;
+let aiming = false;
+let shotsFired = 0;
+let shotsHit = 0;
+let headshots = 0;
 
 const direction = new THREE.Vector3();
 const muzzleWorld = new THREE.Vector3();
@@ -85,12 +90,15 @@ scene.add(tracer);
 let tracerTime = 0;
 
 const grenades = createGrenades(scene, world.colliders, onGrenadeExplode);
+const smoke = createSmoke(scene, world.colliders);
 
 const botCtx = {
   match,
   player,
   audio,
   random,
+  smoke,
+  grenades,
   time: () => elapsed,
   onShotFired: () => {},
   damagePlayer,
@@ -138,6 +146,9 @@ function siteAt(position) {
 }
 
 function damagePlayer(amount, attacker, part) {
+  // A staged screenshot (?shot=...) is a photo setup: the player cannot die
+  // mid-setup while the other bots keep shooting. Live play is unaffected.
+  if (shot) return;
   if (!player.alive) return;
   let remaining = amount;
   if (player.armor > 0) {
@@ -222,6 +233,8 @@ function shoot(spread) {
     audio.dryFire();
     return false;
   }
+  shotsFired += 1;
+  bloom = Math.min(0.02, bloom + 0.0035);
   camera.getWorldDirection(direction);
   direction.x += (random() * 2 - 1) * spread;
   direction.y += (random() * 2 - 1) * spread;
@@ -237,7 +250,10 @@ function shoot(spread) {
   if (hit && hit.object.userData.bot) {
     const bot = hit.object.userData.bot;
     const def = arsenal.def();
-    const killed = bots.damage(bot, def.damage * (hit.object.userData.part === 'head' ? def.headMult : 1), hit.object.userData.part, 'player');
+    const isHead = hit.object.userData.part === 'head';
+    shotsHit += 1;
+    if (isHead) headshots += 1;
+    const killed = bots.damage(bot, def.damage * (isHead ? def.headMult : 1), hit.object.userData.part, 'player');
     hud.hitMarker(killed, shot ? 4000 : 90);
     if (!killed) audio.hit(false);
   }
@@ -251,11 +267,14 @@ function shoot(spread) {
 function buyItem(id) {
   const state = match.state;
   if (state.phase !== 'buy') return;
-  const price = id === 'grenade' ? GRENADE_PRICE : id === 'armor' ? ARMOR_PRICE : WEAPONS[id].price;
+  const price = id === 'grenade' ? GRENADE_PRICE : id === 'smoke' ? SMOKE_PRICE : id === 'armor' ? ARMOR_PRICE : WEAPONS[id].price;
   if (state.money < price) return;
   if (id === 'grenade') {
     if (arsenal.state.grenades >= 2) return;
     arsenal.state.grenades += 1;
+  } else if (id === 'smoke') {
+    if (arsenal.state.smokes >= 1) return;
+    arsenal.state.smokes += 1;
   } else if (id === 'armor') {
     if (player.armor >= 50) return;
     player.armor = 50;
@@ -265,9 +284,9 @@ function buyItem(id) {
   state.money -= price;
   audio.buy();
   hud.markBought(id);
-  if (id !== 'grenade' && id !== 'armor') arsenal.select(id);
+  if (id !== 'grenade' && id !== 'smoke' && id !== 'armor') arsenal.select(id);
   hud.setMoney(state.money);
-  hud.setWeapon(arsenal.def().name, arsenal.state.grenades);
+  hud.setWeapon(arsenal.def().name, arsenal.state.grenades, arsenal.state.smokes);
 }
 
 function startRound() {
@@ -281,12 +300,13 @@ function startRound() {
   playerMover.place(world.spawns.atk[1].x, world.spawns.atk[1].z, 0);
   arsenal.resetRound(survived);
   grenades.clear();
+  smoke.clear();
   bots.resetRound();
   buyOpen = false;
   hud.showBuy(false);
   hud.setHealth(player.hp, player.armor);
   hud.setAmmo(arsenal.items.pistol.mag, arsenal.items.pistol.reserve);
-  hud.setWeapon(arsenal.def().name, arsenal.state.grenades);
+  hud.setWeapon(arsenal.def().name, arsenal.state.grenades, arsenal.state.smokes);
   hud.setMoney(match.state.money);
   hud.setScore(match.state.score.atk, match.state.score.def, match.state.round);
   hud.setBomb('BOMB CARRIED — PLANT AT A OR B');
@@ -342,12 +362,14 @@ function step(dt) {
     hud.setBomb('BOMB CARRIED — PLANT AT A OR B');
   }
   if (previousPhase !== 'end' && state.phase === 'end') {
+    const accuracy = shotsFired > 0 ? Math.round((shotsHit / shotsFired) * 100) : 0;
+    const stats = { accuracy, kills: match.state.kills, deaths: match.state.deaths, headshots };
     if (state.matchOver) {
-      hud.showOverlay('matchEnd', { winner: state.winner, scoreAtk: state.score.atk, scoreDef: state.score.def });
+      hud.showOverlay('matchEnd', { winner: state.winner, scoreAtk: state.score.atk, scoreDef: state.score.def, ...stats });
       if (state.winner === 'atk') audio.roundWin();
       else audio.roundLose();
     } else {
-      hud.showOverlay('roundEnd', { winner: state.result.winner, reason: state.result.reason, scoreAtk: state.score.atk, scoreDef: state.score.def, matchOver: false });
+      hud.showOverlay('roundEnd', { winner: state.result.winner, reason: state.result.reason, scoreAtk: state.score.atk, scoreDef: state.score.def, matchOver: false, ...stats });
       if (state.result.winner === 'atk') audio.roundWin();
       else audio.roundLose();
     }
@@ -372,6 +394,7 @@ function step(dt) {
       jump: keys.has('Space'),
       crouch: keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC'),
       sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'),
+      speedMult: aiming ? arsenal.def().adsMoveMult : 1,
     };
     playerMover.step(dt, inputState);
   }
@@ -385,6 +408,7 @@ function step(dt) {
       if (input.takePressed('Digit3')) buyItem('sniper');
       if (input.takePressed('Digit4')) buyItem('grenade');
       if (input.takePressed('Digit5')) buyItem('armor');
+      if (input.takePressed('Digit6')) buyItem('smoke');
     } else {
       if (input.takePressed('Digit1')) arsenal.select('pistol');
       if (input.takePressed('Digit2')) arsenal.select('rifle');
@@ -396,7 +420,14 @@ function step(dt) {
       audio.grenadePin();
       camera.getWorldDirection(direction);
       grenades.throwFrom(camera.position, direction);
-      hud.setWeapon(arsenal.def().name, arsenal.state.grenades);
+      hud.setWeapon(arsenal.def().name, arsenal.state.grenades, arsenal.state.smokes);
+    }
+    if (input.takePressed('KeyH') && arsenal.state.smokes > 0 && state.phase !== 'buy') {
+      arsenal.state.smokes -= 1;
+      audio.grenadePin();
+      camera.getWorldDirection(direction);
+      smoke.throwFrom(camera.position, direction);
+      hud.setWeapon(arsenal.def().name, arsenal.state.grenades, arsenal.state.smokes);
     }
     if (input.takePressed('KeyB') && state.phase === 'buy') {
       buyOpen = !buyOpen;
@@ -446,7 +477,9 @@ function step(dt) {
 
   arsenal.step(dt);
   grenades.step(dt);
+  smoke.step(dt);
   bots.step(dt, elapsed);
+  bloom = Math.max(0, bloom - dt * 0.04);
 
   if (tracerTime > 0) {
     tracerTime -= dt;
@@ -469,10 +502,11 @@ function step(dt) {
     }
   }
 
-  // HUD: health, ammo, money, timer, score, crosshair, minimap.
+  // HUD: health, ammo, money, timer, score, crosshair, minimap, roster.
   hud.setHealth(player.hp, player.armor);
   hud.setAmmo(arsenal.items[arsenal.state.current].mag, arsenal.items[arsenal.state.current].reserve);
   hud.setMoney(state.money);
+  hud.setRoster(bots.list);
   const timerSeconds = state.phase === 'buy' || state.phase === 'end' ? state.phaseTime : state.phase === 'planted' ? state.bomb.fuse : state.timer;
   hud.setTimer(timerSeconds, state.phase);
   hud.setScore(state.score.atk, state.score.def, state.round);
@@ -481,6 +515,7 @@ function step(dt) {
     sites: world.sites,
     bombSite: state.bomb.planted ? state.bomb.site : null,
     bombPlanted: state.bomb.planted,
+    smokes: smoke.clouds.map((cloud) => ({ x: cloud.center.x, z: cloud.center.z })),
     player: { x: playerMover.state.position.x, z: playerMover.state.position.z, yaw: playerMover.state.yaw },
     bots: bots.list.map((bot) => ({
       x: bot.mover.state.position.x,
@@ -496,17 +531,24 @@ function frame(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
   if (!frozen) {
+    aiming = input.state.scoped && player.alive && (match.state.phase === 'live' || match.state.phase === 'planted');
     const look = input.takeLook();
     if (player.alive) {
-      const sensitivity = input.state.scoped && arsenal.state.current === 'sniper' ? 0.0008 : 0.0022;
+      const sensitivity = input.state.scoped && arsenal.state.current === 'sniper' ? 0.0008 : aiming ? 0.0013 : 0.0022;
       playerMover.look(look.x, look.y, sensitivity);
     }
     if (input.state.firing && arsenal.ready() && player.alive && (match.state.phase === 'live' || match.state.phase === 'planted')) {
-      shoot(shot ? 0 : arsenal.spread(playerMover.groundSpeed()));
+      // Stopping to aim pays: ADS tightens the spread, firing on the move or in the
+      // air widens it, and sustained fire blooms it until the trigger is released.
+      const spread = arsenal.spread(playerMover.groundSpeed())
+        * (aiming ? arsenal.def().adsSpreadMult : 1)
+        * (playerMover.state.onGround ? 1 : 1.6) + bloom;
+      shoot(shot ? 0 : spread);
     }
     if (input.state.keys.has('KeyR')) arsenal.reload();
-    // Sniper scope: narrow the field of view while the right button is held.
-    const wantFov = input.state.scoped && arsenal.state.current === 'sniper' ? 30 : 74;
+    // Aim down sights: the right button narrows the field of view — the sniper's
+    // scope most of all — and the crosshair tightens with the spread.
+    const wantFov = input.state.scoped && arsenal.state.current === 'sniper' ? 30 : aiming ? arsenal.def().adsFov : 74;
     if (Math.abs(camera.fov - wantFov) > 0.5) {
       camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 14);
       camera.updateProjectionMatrix();
@@ -566,6 +608,11 @@ function runShot(name) {
     aimAt(enemyPoint(1.53));
     shoot(0);
     settle(12);
+    // The kill lands, then a smoke pops ahead to screen the lane: the action shot
+    // shows the firefight and the utility at once.
+    camera.getWorldDirection(direction);
+    smoke.throwFrom(camera.position, direction);
+    settle(100);
   } else if (name === 'end') {
     match.state.score.atk = 1;
     match.state.score.def = 0;
@@ -607,3 +654,82 @@ startRound();
 syncCamera();
 if (shot) runShot(shot);
 else requestAnimationFrame(frame);
+
+// Test hook for headless playtests: read-only state plus aim, fire and utility
+// helpers. It drives the real simulation — aimAt and fire call the same functions
+// the mouse does — so a playtest through it proves the game, not the hook.
+window.__dustline = {
+  state() {
+    return {
+      phase: match.state.phase,
+      timer: match.state.timer,
+      round: match.state.round,
+      score: { ...match.state.score },
+      money: match.state.money,
+      hp: player.hp,
+      armor: player.armor,
+      alive: player.alive,
+      pos: [playerMover.state.position.x, playerMover.state.position.y, playerMover.state.position.z],
+      yaw: playerMover.state.yaw,
+      pitch: playerMover.state.pitch,
+      eye: playerMover.state.eye,
+      crouching: playerMover.state.crouching,
+      weapon: arsenal.state.current,
+      mag: arsenal.items[arsenal.state.current].mag,
+      grenades: arsenal.state.grenades,
+      smokes: arsenal.state.smokes,
+      fov: camera.fov,
+      aiming,
+      shotsFired,
+      shotsHit,
+      headshots,
+      bots: bots.list.map((bot) => ({
+        name: bot.name,
+        team: bot.team,
+        hp: bot.hp,
+        alive: bot.alive,
+        state: bot.state,
+        grenades: bot.grenades,
+        pos: [bot.mover.state.position.x, bot.mover.state.position.y, bot.mover.state.position.z],
+      })),
+      bomb: { planted: match.state.bomb.planted, site: match.state.bomb.site, fuse: match.state.bomb.fuse },
+      smokeClouds: smoke.clouds.map((cloud) => [cloud.center.x, cloud.center.y, cloud.center.z]),
+    };
+  },
+  smokeBlocked(ax, ay, az, bx, by, bz) {
+    return smoke.blocked(new THREE.Vector3(ax, ay, az), new THREE.Vector3(bx, by, bz));
+  },
+  aimAt(x, y, z) {
+    aimAt(new THREE.Vector3(x, y, z));
+  },
+  fire() {
+    if (player.alive && (match.state.phase === 'live' || match.state.phase === 'planted')) shoot(0);
+  },
+  place(x, z, yaw) {
+    playerMover.place(x, z, yaw);
+    syncCamera();
+  },
+  startLive() {
+    match.state.phase = 'live';
+    match.state.timer = 88;
+    hud.showBuy(false);
+    buyOpen = false;
+  },
+  buy(id) {
+    buyItem(id);
+  },
+  throwSmoke() {
+    if (arsenal.state.smokes <= 0) return false;
+    arsenal.state.smokes -= 1;
+    camera.getWorldDirection(direction);
+    smoke.throwFrom(camera.position, direction);
+    return true;
+  },
+  throwGrenade() {
+    if (arsenal.state.grenades <= 0) return false;
+    arsenal.state.grenades -= 1;
+    camera.getWorldDirection(direction);
+    grenades.throwFrom(camera.position, direction);
+    return true;
+  },
+};

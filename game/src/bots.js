@@ -57,7 +57,7 @@ export function createBots(scene, world, ctx) {
         mesh.receiveShadow = true;
       }
     });
-    return { group, torso, head, marker };
+    return { group, torso, torsoMat, head, marker };
   }
 
   function makeBot(team, index) {
@@ -92,6 +92,12 @@ export function createBots(scene, world, ctx) {
       thinkTimer: Math.random() * THINK_EVERY,
       fall: 0,
       defusing: false,
+      flash: 0,
+      grenades: 1,
+      grenadeTimer: 10 + Math.random() * 12,
+      routeLoops: 0,
+      stuckTimer: 0,
+      stuckPos: { x: 0, z: 0 },
     };
     bot.mag = WEAPONS[bot.weapon].mag;
     body.torso.userData.bot = bot;
@@ -120,6 +126,8 @@ export function createBots(scene, world, ctx) {
     tmpDir.normalize();
     const forward = new THREE.Vector3(-Math.sin(s.yaw), 0, -Math.cos(s.yaw));
     if (forward.dot(tmpDir) < -0.15) return false;
+    // Smoke cuts the sightline: a cloud between eye and target hides the target.
+    if (ctx.smoke && ctx.smoke.blocked(tmpEye, targetPos)) return false;
     raycaster.set(tmpEye, tmpDir);
     raycaster.far = distance;
     const blocked = raycaster.intersectObjects(world.shootables, false)[0];
@@ -191,6 +199,7 @@ export function createBots(scene, world, ctx) {
   function damage(bot, amount, part, attacker) {
     if (!bot.alive) return false;
     bot.hp -= amount;
+    bot.flash = 1;
     if (bot.defusing) {
       bot.defusing = false;
       ctx.match.state.bomb.defuse = 0;
@@ -219,6 +228,11 @@ export function createBots(scene, world, ctx) {
       bot.burstLeft = 0;
       bot.state = 'patrol';
       bot.routeIndex = 0;
+      bot.routeLoops = 0;
+      bot.flash = 0;
+      bot.grenades = 1;
+      bot.grenadeTimer = 10 + ctx.random() * 12;
+      bot.body.torsoMat.emissive.setScalar(0);
       bot.body.group.rotation.set(0, 0, 0);
       bot.body.group.position.y = 0;
       bot.body.marker.visible = true;
@@ -226,8 +240,14 @@ export function createBots(scene, world, ctx) {
     const defSpawns = world.spawns.def;
     const atkSpawns = world.spawns.atk;
     list.filter((b) => b.team === 'def').forEach((bot, index) => {
-      bot.mover.place(defSpawns[index].x, defSpawns[index].z, Math.PI);
-      bot.route = world.waypoints.defPatrol;
+      // Hollow takes the walkway: he spawns at the stair foot and climbs straight
+      // up to the high ground over site A, instead of crossing mid to get there.
+      if (index === 1) {
+        bot.mover.place(-20.4, 7, 0);
+      } else {
+        bot.mover.place(defSpawns[index].x, defSpawns[index].z, Math.PI);
+      }
+      bot.route = index === 1 ? world.waypoints.walkway : world.waypoints.defPatrol;
     });
     list.filter((b) => b.team === 'atk').forEach((bot, index) => {
       // The player takes the middle spawn; the two friendly bots take the flanks.
@@ -336,6 +356,9 @@ export function createBots(scene, world, ctx) {
         continue;
       }
       bot.cooldown = Math.max(0, bot.cooldown - dt);
+      bot.grenadeTimer = Math.max(0, bot.grenadeTimer - dt);
+      bot.flash = Math.max(0, bot.flash - dt * 4);
+      bot.body.torsoMat.emissive.setScalar(bot.flash * 0.55);
       if (bot.reloadLeft > 0) {
         bot.reloadLeft -= dt;
         if (bot.reloadLeft <= 0) {
@@ -375,6 +398,20 @@ export function createBots(scene, world, ctx) {
             }
           }
         }
+        // A defender with a grenade left lobs one at a distant target it can see.
+        // The throw itself is quiet; the detonation is what the other bots hear
+        // (main.js calls bots.hear from onGrenadeExplode).
+        if (bot.team === 'def' && bot.grenades > 0 && bot.target && bot.lastSeenTime > time - 0.5 && bot.grenadeTimer <= 0) {
+          const distance = bot.mover.state.position.distanceTo(bot.target.aimPoint);
+          if (distance > 14) {
+            bot.grenades -= 1;
+            bot.grenadeTimer = 24 + ctx.random() * 8;
+            eyePosition(bot, tmpEye);
+            tmpDir.copy(bot.target.aimPoint).sub(tmpEye).normalize();
+            ctx.grenades.throwFrom(tmpEye, tmpDir, 12);
+            ctx.audio.grenadePin();
+          }
+        }
       } else if (bot.state === 'defuse') {
         const site = world.sites[ctx.match.state.bomb.site];
         const arrived = moveToward(bot, dt, { x: site.center.x, z: site.center.z }, BOT_SPEED);
@@ -407,7 +444,36 @@ export function createBots(scene, world, ctx) {
         if (route && route.length > 0) {
           const point = route[bot.routeIndex % route.length];
           const arrived = moveToward(bot, dt, { x: point[0], z: point[1] }, BOT_SPEED);
-          if (arrived) bot.routeIndex = (bot.routeIndex + 1) % route.length;
+          if (arrived) {
+            bot.routeIndex = (bot.routeIndex + 1) % route.length;
+            bot.stuckTimer = 0;
+            bot.stuckPos = { x: s.position.x, z: s.position.z };
+            if (bot.routeIndex === 0) {
+              bot.routeLoops += 1;
+              // Attackers rotate: two full loops with no plant means the push is stale.
+              if (bot.team === 'atk' && bot.routeLoops >= 2 && ctx.match.state.phase === 'live'
+                && !ctx.match.state.bomb.planted && time > 25 && ctx.random() < 0.5) {
+                bot.route = bot.route === world.waypoints.atkA ? world.waypoints.atkB : world.waypoints.atkA;
+                bot.routeLoops = 0;
+              }
+            }
+          } else {
+            // Stuck: wedged on a wall or a stair face, no progress toward the point.
+            // After 3 s of standing still, skip the unreachable waypoint instead of
+            // standing there for the rest of the round.
+            const moved = Math.hypot(s.position.x - bot.stuckPos.x, s.position.z - bot.stuckPos.z);
+            if (moved > 0.3) {
+              bot.stuckTimer = 0;
+              bot.stuckPos = { x: s.position.x, z: s.position.z };
+            } else {
+              bot.stuckTimer += dt;
+              if (bot.stuckTimer > 3) {
+                bot.routeIndex = (bot.routeIndex + 1) % route.length;
+                bot.stuckTimer = 0;
+                bot.stuckPos = { x: s.position.x, z: s.position.z };
+              }
+            }
+          }
         } else {
           bot.mover.step(dt, { forward: 0, strafe: 0, jump: false, crouch: false });
         }

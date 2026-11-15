@@ -1,9 +1,30 @@
 // The map: DUSTLINE, a freight yard at dusk. 44 x 32 m, two bomb sites (A west, B east),
-// a mid lane and two side lanes, containers and crates for cover. Every box is a collider
-// for movement and a surface a bullet stops on. Plain geometry only, no models, no textures
-// except two canvas-drawn site letters made at runtime.
+// a mid lane and two side lanes, containers and crates for cover, and a raised steel
+// walkway along the west wall with a stair run — the yard's one high ground, reached by
+// the mover's step-up. Every box is a collider for movement and a surface a bullet
+// stops on. Plain geometry only, no models, no textures except two canvas-drawn site
+// letters and a canvas gradient sky made at runtime.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
+
+function skyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+  gradient.addColorStop(0, '#141a33');
+  gradient.addColorStop(0.45, '#4a3550');
+  gradient.addColorStop(0.68, '#a85a34');
+  gradient.addColorStop(0.78, '#e07830');
+  gradient.addColorStop(0.85, '#2b1a12');
+  gradient.addColorStop(1, '#191411');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 16, 512);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
 
 function siteTexture(letter) {
   const canvas = document.createElement('canvas');
@@ -87,6 +108,88 @@ export function createWorld(scene) {
   box(0.9, 0.9, 0.9, -3, 0.45, -4, 'hairline');
   box(0.9, 0.9, 0.9, 3, 0.45, -4, 'hairline');
 
+  // The walkway: a steel deck 2.6 m up along the west wall, the yard's high ground.
+  // Seven steps rise 0.325 m each from the ground to the deck; the mover's step-up
+  // climbs them, and the deck overlooks site A and the west lane.
+  box(2, 0.25, 16, -20.4, 2.475, -6, 'surface');
+  for (let stepIndex = 0; stepIndex < 7; stepIndex += 1) {
+    const top = 2.6 - (stepIndex + 1) * 0.325;
+    box(2, top, 0.6, -20.4, top / 2, 2.3 + stepIndex * 0.6, 'hairline');
+  }
+  box(0.3, 2.6, 0.3, -21.2, 1.3, -13, 'hairline');
+  box(0.3, 2.6, 0.3, -19.6, 1.3, -13, 'hairline');
+  // Deck railing: a solid rail along the east edge and the north end, so nobody
+  // walks off the high ground — the only way down is the stair run at the south
+  // end. The rail is an invisible movement collider only (no mesh in shootables),
+  // so bullets still fly over it and the deck keeps its firing lines.
+  const railMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.accent), roughness: 0.5, metalness: 0.5 });
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 16), railMat);
+  rail.position.set(-19.45, 3.55, -6);
+  group.add(rail);
+  for (const postZ of [-13.5, -9, -4.5, 0]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.95, 0.06), railMat);
+    post.position.set(-19.45, 3.07, postZ);
+    group.add(post);
+  }
+  const northRail = new THREE.Mesh(new THREE.BoxGeometry(2, 0.06, 0.06), railMat);
+  northRail.position.set(-20.4, 3.55, -13.95);
+  group.add(northRail);
+  for (const postX of [-21, -20.4, -19.8]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.95, 0.06), railMat);
+    post.position.set(postX, 3.07, -13.95);
+    group.add(post);
+  }
+  colliders.push(new THREE.Box3(new THREE.Vector3(-19.5, 2.6, -14), new THREE.Vector3(-19.4, 3.55, 2)));
+  colliders.push(new THREE.Box3(new THREE.Vector3(-21.4, 2.6, -14.1), new THREE.Vector3(-19.4, 3.55, -13.9)));
+
+  // Visual-only dressing: no colliders, so nothing here changes movement or bullets.
+  // Rail tracks across the yard floor, two dark steel strips.
+  const railSteel = new THREE.MeshStandardMaterial({ color: new THREE.Color('#241d17'), roughness: 0.4, metalness: 0.6 });
+  for (const trackZ of [4.5, 6.5]) {
+    const track = new THREE.Mesh(new THREE.BoxGeometry(44, 0.05, 0.5), railSteel);
+    track.position.set(0, 0.03, trackZ);
+    group.add(track);
+  }
+  // Lamp posts flanking mid: warm pools of light on the lane.
+  for (const lampX of [-4.5, 4.5]) {
+    box(0.15, 3.2, 0.15, lampX, 1.6, 0, 'hairline');
+    const lamp = new THREE.PointLight(new THREE.Color('#ffb066'), 5, 10);
+    lamp.position.set(lampX, 3.1, 0);
+    group.add(lamp);
+  }
+  // Skyline beyond the walls: container stacks and two gantry cranes in silhouette.
+  const silhouette = new THREE.MeshStandardMaterial({ color: new THREE.Color('#241a14'), roughness: 1, metalness: 0 });
+  function skylineBox(width, height, depth, x, y, z) {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), silhouette);
+    mesh.position.set(x, y, z);
+    group.add(mesh);
+  }
+  skylineBox(6, 2.6, 2.6, -26, 1.3, -8, 0);
+  skylineBox(6, 5.2, 2.6, -26, 2.6, -4, 0);
+  skylineBox(6, 2.6, 2.6, 26, 1.3, 6, 0);
+  skylineBox(2.6, 7.8, 2.6, 24, 3.9, -12, 0);
+  for (const craneX of [-8, 12]) {
+    skylineBox(0.9, 19, 0.9, craneX, 9.5, -21, 0);
+    skylineBox(15, 0.7, 0.7, craneX + 3, 18.4, -21, 0);
+    skylineBox(4, 0.7, 0.7, craneX - 5.5, 18.4, -21, 0);
+    skylineBox(0.12, 6, 0.12, craneX + 8, 15, -21, 0);
+    skylineBox(0.8, 0.8, 0.8, craneX + 8, 11.8, -21, 0);
+  }
+
+  // Sky: a gradient dome and a low sun disc, both unfogged so the dusk reads.
+  const skyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(110, 24, 16),
+    new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false }),
+  );
+  scene.add(skyDome);
+  const sunDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(7, 24),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb066'), fog: false }),
+  );
+  sunDisc.position.set(-70, 22, -55);
+  sunDisc.lookAt(0, 0, 0);
+  scene.add(sunDisc);
+
   // Site markers: a painted letter on the floor and a beacon pole that glows.
   function siteMarker(letter, x, z) {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 4.4), letter === 'A' ? siteA : siteB);
@@ -143,6 +246,9 @@ export function createWorld(scene) {
       atkMid: [[0, 6], [0, 0], [0, -6], [0, -11]],
       defPatrol: [[-16, -8], [-8, -8], [0, -10], [8, -8], [16, -8], [8, -8], [0, -10], [-8, -8]],
       defMid: [[0, -4], [-4, -6], [4, -6]],
+      // Up the stair run and along the deck: the walkway patrol, high ground over A.
+      // The first point is the stair foot, so the patrol climbs straight up.
+      walkway: [[-20.4, 4], [-20.4, 0], [-20.4, -6], [-20.4, -12], [-20.4, -6], [-20.4, 0], [-20.4, 4], [-20.4, 8]],
     },
   };
 }

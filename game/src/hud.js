@@ -1,7 +1,7 @@
 // The DOM HUD: health, armour, ammo, money, timer, score, kill feed and every overlay
 // panel. It never touches the simulation; main.js pushes numbers in and reads the play,
 // buy and restart callbacks out.
-import { WEAPONS, GRENADE_PRICE, ARMOR_PRICE } from './weapons.js';
+import { WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE } from './weapons.js';
 
 const COPY = {
   start: {
@@ -37,6 +37,7 @@ const BUY_ITEMS = [
   { id: 'sniper', key: '3' },
   { id: 'grenade', key: '4' },
   { id: 'armor', key: '5' },
+  { id: 'smoke', key: '6' },
 ];
 
 export function createHud(onBuy) {
@@ -65,8 +66,10 @@ export function createHud(onBuy) {
   const buyMoney = document.getElementById('buy-money');
   const crosshair = document.getElementById('crosshair');
   const hint = document.getElementById('hint');
+  const roster = document.getElementById('roster');
   let hitTimer = 0;
   let last = {};
+  let lastRoster = '';
 
   const itemRows = {};
   for (const item of BUY_ITEMS) {
@@ -74,8 +77,8 @@ export function createHud(onBuy) {
     row.type = 'button';
     row.className = 'buy-row';
     row.dataset.item = item.id;
-    const label = item.id === 'grenade' ? 'Frag grenade' : item.id === 'armor' ? 'Kevlar armour' : WEAPONS[item.id].name;
-    const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'armor' ? ARMOR_PRICE : WEAPONS[item.id].price;
+    const label = item.id === 'grenade' ? 'Frag grenade' : item.id === 'smoke' ? 'Smoke grenade' : item.id === 'armor' ? 'Kevlar armour' : WEAPONS[item.id].name;
+    const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'smoke' ? SMOKE_PRICE : item.id === 'armor' ? ARMOR_PRICE : WEAPONS[item.id].price;
     row.innerHTML = `<span class="buy-key">${item.key}</span><span class="buy-label">${label}</span><span class="buy-price">$${price}</span>`;
     row.addEventListener('click', () => onBuy(item.id));
     buyItems.appendChild(row);
@@ -100,15 +103,35 @@ export function createHud(onBuy) {
       setText(ammoReserve, `/ ${reserve}`, 'reserve');
       ammo.classList.toggle('empty', mag === 0);
     },
-    setWeapon(name, grenades) {
-      setText(weaponName, grenades > 0 ? `${name}  ·  ${grenades} grenade${grenades > 1 ? 's' : ''}` : name, 'weapon');
+    setWeapon(name, grenades, smokes = 0) {
+      const parts = [name];
+      if (grenades > 0) parts.push(`${grenades} frag`);
+      if (smokes > 0) parts.push(`${smokes} smoke`);
+      setText(weaponName, parts.join('  ·  '), 'weapon');
     },
     setMoney(value) {
       setText(moneyValue, `$${value}`, 'money');
       setText(buyMoney, `$${value}`, 'buyMoney');
       for (const item of BUY_ITEMS) {
-        const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'armor' ? ARMOR_PRICE : WEAPONS[item.id].price;
+        const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'smoke' ? SMOKE_PRICE : item.id === 'armor' ? ARMOR_PRICE : WEAPONS[item.id].price;
         itemRows[item.id].classList.toggle('cant', value < price);
+      }
+    },
+    setRoster(bots) {
+      const key = bots.map((bot) => `${bot.team[0]}${bot.alive ? 1 : 0}`).join('');
+      if (key === lastRoster) return;
+      lastRoster = key;
+      roster.innerHTML = '';
+      for (const team of ['atk', 'def']) {
+        const group = document.createElement('span');
+        group.className = `roster-team ${team}`;
+        for (const bot of bots.filter((item) => item.team === team)) {
+          const dot = document.createElement('i');
+          dot.className = bot.alive ? 'alive' : 'dead';
+          dot.title = bot.name;
+          group.appendChild(dot);
+        }
+        roster.appendChild(group);
       }
     },
     setTimer(seconds, phase) {
@@ -158,13 +181,16 @@ export function createHud(onBuy) {
     },
     showOverlay(mode, data = {}) {
       const text = COPY[mode];
+      const statsLine = data.accuracy !== undefined
+        ? ` Accuracy ${data.accuracy}% · ${data.kills} kills · ${data.deaths} deaths · ${data.headshots} headshots.`
+        : '';
       if (mode === 'roundEnd') {
         title.textContent = data.winner === 'atk' ? 'Round won' : 'Round lost';
-        copy.textContent = `${data.reason} Vanguard ${data.scoreAtk} — ${data.scoreDef} Ember.`;
+        copy.textContent = `${data.reason} Vanguard ${data.scoreAtk} — ${data.scoreDef} Ember.${statsLine}`;
         play.textContent = data.matchOver ? 'See the result' : 'Next round';
       } else if (mode === 'matchEnd') {
         title.textContent = data.winner === 'atk' ? 'Vanguard takes the yard' : 'Ember holds the yard';
-        copy.textContent = `Final score: Vanguard ${data.scoreAtk} — ${data.scoreDef} Ember. ${data.winner === 'atk' ? 'The yard is yours.' : 'Run it back.'}`;
+        copy.textContent = `Final score: Vanguard ${data.scoreAtk} — ${data.scoreDef} Ember. ${data.winner === 'atk' ? 'The yard is yours.' : 'Run it back.'}${statsLine}`;
         play.textContent = 'Play again';
       } else {
         title.textContent = text.title;

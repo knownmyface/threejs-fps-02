@@ -8,22 +8,27 @@ export const WEAPONS = {
   pistol: {
     name: 'P-9 Sidearm', price: 0, damage: 25, headMult: 3, mag: 12, reserve: 60,
     fireGap: 0.16, auto: false, spreadStill: 0.004, spreadMove: 0.02, reloadTime: 1.4, range: 60,
+    adsSpreadMult: 0.5, adsFov: 60, adsMoveMult: 0.6,
   },
   rifle: {
     name: 'Dingo-7 Rifle', price: 1500, damage: 34, headMult: 3, mag: 30, reserve: 90,
     fireGap: 0.096, auto: true, spreadStill: 0.0022, spreadMove: 0.028, reloadTime: 1.9, range: 80,
+    adsSpreadMult: 0.45, adsFov: 58, adsMoveMult: 0.6,
   },
   smg: {
     name: 'Wasp-9 SMG', price: 900, damage: 22, headMult: 3, mag: 32, reserve: 128,
     fireGap: 0.07, auto: true, spreadStill: 0.006, spreadMove: 0.032, reloadTime: 1.6, range: 45,
+    adsSpreadMult: 0.5, adsFov: 62, adsMoveMult: 0.65,
   },
   sniper: {
     name: 'Kestrel .50', price: 2800, damage: 90, headMult: 2.8, mag: 5, reserve: 15,
     fireGap: 1.1, auto: false, spreadStill: 0.0004, spreadMove: 0.05, reloadTime: 2.6, range: 120,
+    adsSpreadMult: 0.4, adsFov: 30, adsMoveMult: 0.5,
   },
 };
 
 export const GRENADE_PRICE = 300;
+export const SMOKE_PRICE = 400;
 export const ARMOR_PRICE = 600;
 
 function buildViewModel(id) {
@@ -94,7 +99,7 @@ export function createArsenal(camera, audio) {
   for (const id of Object.keys(WEAPONS)) {
     items[id] = { mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve, owned: id === 'pistol' };
   }
-  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, scoped: false };
+  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, smokes: 0, scoped: false };
   models.pistol.visible = true;
 
   function def() {
@@ -178,6 +183,7 @@ export function createArsenal(camera, audio) {
           if (id !== 'pistol') items[id].owned = false;
         }
         state.grenades = 0;
+        state.smokes = 0;
         state.current = 'pistol';
         for (const id of Object.keys(models)) models[id].visible = id === 'pistol';
       }
@@ -249,6 +255,112 @@ export function createGrenades(scene, colliders, onExplode) {
         position: mesh.position,
         velocity: direction.clone().multiplyScalar(speed).add(new THREE.Vector3(0, 3.5, 0)),
         fuse: 2.2,
+      });
+    },
+  };
+}
+
+// Smoke: a thrown canister that pops into a grey cloud. The cloud blocks sight, not
+// bullets — a bot whose line of sight crosses a cloud cannot see through it, so smoke
+// cuts sightlines for pushes and defuses. One cloud is a dozen puffs in a ball.
+export function createSmoke(scene, colliders) {
+  const puffGeometry = new THREE.SphereGeometry(1, 10, 8);
+  const puffMaterial = new THREE.MeshStandardMaterial({ color: new THREE.Color('#8d8578'), transparent: true, opacity: 0.5, roughness: 1, metalness: 0, depthWrite: false });
+  const canisterGeometry = new THREE.SphereGeometry(0.08, 10, 8);
+  const canisterMaterial = new THREE.MeshStandardMaterial({ color: new THREE.Color('#5a5148'), roughness: 0.5, metalness: 0.5 });
+  const clouds = [];
+  const canisters = [];
+  const probe = new THREE.Box3();
+  const CLOUD_RADIUS = 2.6;
+  const CLOUD_LIFE = 12;
+
+  function deploy(position) {
+    const group = new THREE.Group();
+    const puffs = [];
+    for (let index = 0; index < 12; index += 1) {
+      const puff = new THREE.Mesh(puffGeometry, puffMaterial.clone());
+      const angle = (index / 12) * Math.PI * 2;
+      const ring = index % 3;
+      puff.position.set(Math.cos(angle) * (0.6 + ring * 0.6), 0.9 + (index % 4) * 0.45, Math.sin(angle) * (0.6 + ring * 0.6));
+      puff.scale.setScalar(0.9 + ((index * 37) % 10) / 14);
+      group.add(puff);
+      puffs.push(puff);
+    }
+    group.position.copy(position);
+    group.position.y = Math.max(group.position.y, 0.4);
+    scene.add(group);
+    clouds.push({ group, puffs, center: group.position.clone(), life: CLOUD_LIFE });
+  }
+
+  function segmentBlocked(a, b) {
+    for (const cloud of clouds) {
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const abz = b.z - a.z;
+      const lengthSq = abx * abx + aby * aby + abz * abz;
+      const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((cloud.center.x - a.x) * abx + (cloud.center.y - a.y) * aby + (cloud.center.z - a.z) * abz) / lengthSq));
+      const dx = a.x + abx * t - cloud.center.x;
+      const dy = a.y + aby * t - cloud.center.y;
+      const dz = a.z + abz * t - cloud.center.z;
+      if (dx * dx + dy * dy + dz * dz < CLOUD_RADIUS * CLOUD_RADIUS) return true;
+    }
+    return false;
+  }
+
+  function step(dt) {
+    for (let index = canisters.length - 1; index >= 0; index -= 1) {
+      const canister = canisters[index];
+      canister.velocity.y -= 14 * dt;
+      canister.position.addScaledVector(canister.velocity, dt);
+      probe.min.set(canister.position.x - 0.08, canister.position.y - 0.08, canister.position.z - 0.08);
+      probe.max.set(canister.position.x + 0.08, canister.position.y + 0.08, canister.position.z + 0.08);
+      let hit = false;
+      for (const collider of colliders) {
+        if (probe.intersectsBox(collider)) { hit = true; break; }
+      }
+      canister.timer -= dt;
+      if (hit || canister.position.y < 0.1 || canister.timer <= 0) {
+        scene.remove(canister.mesh);
+        canisters.splice(index, 1);
+        deploy(canister.position);
+      }
+    }
+    for (let index = clouds.length - 1; index >= 0; index -= 1) {
+      const cloud = clouds[index];
+      cloud.life -= dt;
+      const opacity = cloud.life < 3 ? Math.max(0, cloud.life / 3) * 0.5 : 0.5;
+      for (const puff of cloud.puffs) puff.material.opacity = opacity;
+      if (cloud.life <= 0) {
+        scene.remove(cloud.group);
+        for (const puff of cloud.puffs) puff.material.dispose();
+        clouds.splice(index, 1);
+      }
+    }
+  }
+
+  return {
+    step,
+    clouds,
+    blocked: segmentBlocked,
+    clear() {
+      for (const cloud of clouds) {
+        scene.remove(cloud.group);
+        for (const puff of cloud.puffs) puff.material.dispose();
+      }
+      clouds.length = 0;
+      for (const canister of canisters) scene.remove(canister.mesh);
+      canisters.length = 0;
+    },
+    throwFrom(position, direction, speed = 12) {
+      const mesh = new THREE.Mesh(canisterGeometry, canisterMaterial);
+      mesh.position.copy(position);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      canisters.push({
+        mesh,
+        position: mesh.position,
+        velocity: direction.clone().multiplyScalar(speed).add(new THREE.Vector3(0, 3.2, 0)),
+        timer: 1.4,
       });
     },
   };

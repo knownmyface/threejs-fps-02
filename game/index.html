@@ -75,6 +75,20 @@
   }
   #bomb-status.planted { color: var(--ember); }
 
+  #roster {
+    position: fixed;
+    top: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 16px;
+  }
+  .roster-team { display: flex; gap: 5px; }
+  .roster-team i { width: 8px; height: 8px; border-radius: 50%; display: block; }
+  .roster-team.atk i.alive { background: var(--teal); }
+  .roster-team.def i.alive { background: var(--ember); }
+  .roster-team i.dead { background: var(--hairline); }
+
   #crosshair { position: fixed; left: 50%; top: 50%; width: 0; height: 0; --gap: 6px; }
   #crosshair i { position: absolute; background: var(--ink); opacity: .9; }
   #crosshair i:nth-child(1) { left: -1px; top: calc(-1 * var(--gap) - 7px); width: 2px; height: 7px; }
@@ -294,6 +308,7 @@
     <span class="team def"><b id="score-def">0</b> EMBER</span>
   </div>
   <div id="bomb-status">BOMB CARRIED — PLANT AT A OR B</div>
+  <div id="roster"></div>
   <div id="crosshair"><i></i><i></i><i></i><i></i><span class="dot"></span></div>
   <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
   <div id="damage-flash"></div>
@@ -311,7 +326,7 @@
 
 <div id="buy-menu" hidden>
   <h2>Buy — <span id="buy-money">$800</span></h2>
-  <p>Buy phase. Press 1–5 or click. B closes.</p>
+  <p>Buy phase. Press 1–6 or click. B closes.</p>
   <div id="buy-items"></div>
 </div>
 
@@ -327,6 +342,8 @@
       <li><kbd>R</kbd> Reload</li>
       <li><kbd>1</kbd>–<kbd>4</kbd> Weapons</li>
       <li><kbd>G</kbd> Grenade</li>
+      <li><kbd>H</kbd> Smoke</li>
+      <li><kbd>Right-click</kbd> Aim</li>
       <li><kbd>B</kbd> Buy menu</li>
       <li><kbd>E</kbd> Plant / defuse</li>
       <li><kbd>Ctrl</kbd> Crouch</li>

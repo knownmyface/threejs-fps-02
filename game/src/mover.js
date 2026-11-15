@@ -1,6 +1,9 @@
-// Shared movement: acceleration, friction, gravity, crouch and jump, resolved as a box
-// against the world's colliders one axis at a time, so a wall never swallows a body.
-// The player and every bot move through this one module; only the input differs.
+// Shared movement: acceleration, friction, gravity, crouch, jump and step-up,
+// resolved as a box against the world's colliders one axis at a time, so a wall
+// never swallows a body. The player and every bot move through this one module;
+// only the input differs. Step-up is what makes stairs and the walkway walkable:
+// a ledge up to STEP_UP high is climbed instead of blocking the step, as long as
+// the head stays clear of the ceiling above it.
 import * as THREE from 'three';
 
 const RADIUS = 0.34;
@@ -10,6 +13,7 @@ const STAND_EYE = 1.6;
 const CROUCH_EYE = 1.02;
 const GRAVITY = 20;
 const JUMP_SPEED = 6.2;
+const STEP_UP = 0.55;
 
 export function createMover(colliders, options = {}) {
   const walkSpeed = options.walkSpeed ?? 5.2;
@@ -38,6 +42,22 @@ export function createMover(colliders, options = {}) {
     probe.max.set(x + RADIUS, y + height - lift, z + RADIUS);
     for (const collider of colliders) if (probe.intersectsBox(collider)) return collider;
     return null;
+  }
+
+  // Try to step up onto a ledge: lift the body to the top of the blocker when the
+  // blocker is low enough and the space above it is free, then take the step.
+  function tryStepUp(x, y, z, height) {
+    const blocker = overlaps(x, y, z, height, 0.04);
+    if (!blocker) return false;
+    const top = blocker.max.y;
+    if (top - y > STEP_UP) return false;
+    if (overlaps(x, top, z, height, 0.02)) return false;
+    mover.position.y = top;
+    mover.position.x = x;
+    mover.position.z = z;
+    mover.onGround = true;
+    mover.velocity.y = 0;
+    return true;
   }
 
   function look(dx, dy, sensitivity = 0.0022) {
@@ -71,7 +91,7 @@ export function createMover(colliders, options = {}) {
       wish.set(-sin * forward + cos * strafe, 0, -cos * forward - sin * strafe).normalize();
     }
 
-    const speed = (mover.crouching ? crouchSpeed : walkSpeed) * (input.sprint && !mover.crouching ? 1.35 : 1);
+    const speed = (mover.crouching ? crouchSpeed : walkSpeed) * (input.sprint && !mover.crouching ? 1.35 : 1) * (input.speedMult ?? 1);
     const blend = Math.min(1, (mover.onGround ? groundAccel : airAccel) * dt / speed);
     mover.velocity.x += (wish.x * speed - mover.velocity.x) * blend;
     mover.velocity.z += (wish.z * speed - mover.velocity.z) * blend;
@@ -89,10 +109,10 @@ export function createMover(colliders, options = {}) {
 
     const nextX = mover.position.x + mover.velocity.x * dt;
     if (!overlaps(nextX, mover.position.y, mover.position.z, mover.height, 0.04)) mover.position.x = nextX;
-    else mover.velocity.x = 0;
+    else if (!tryStepUp(nextX, mover.position.y, mover.position.z, mover.height)) mover.velocity.x = 0;
     const nextZ = mover.position.z + mover.velocity.z * dt;
     if (!overlaps(mover.position.x, mover.position.y, nextZ, mover.height, 0.04)) mover.position.z = nextZ;
-    else mover.velocity.z = 0;
+    else if (!tryStepUp(mover.position.x, mover.position.y, nextZ, mover.height)) mover.velocity.z = 0;
 
     mover.position.y += mover.velocity.y * dt;
     mover.onGround = false;

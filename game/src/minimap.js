@@ -49,6 +49,16 @@ export function createMinimap(canvas) {
         ctx.arc(x, z, 4, 0, Math.PI * 2);
         ctx.fill();
       }
+      // Smoke: grey circles that hide whatever is inside them.
+      if (state.smokes) {
+        for (const cloud of state.smokes) {
+          const [sx, sz] = toMap(cloud.x, cloud.z);
+          ctx.fillStyle = 'rgba(141, 133, 120, 0.55)';
+          ctx.beginPath();
+          ctx.arc(sx, sz, 10, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
       // Friendlies and recently seen enemies.
       for (const bot of state.bots) {
         if (!bot.alive) continue;
