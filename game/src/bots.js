@@ -25,6 +25,7 @@ const tmpTarget = new THREE.Vector3();
 const tmpEye = new THREE.Vector3();
 const tmpBox = new THREE.Box3();
 const tmpRay = new THREE.Ray();
+const tmpEnd = new THREE.Vector3();
 
 export function createBots(scene, world, ctx) {
   const raycaster = new THREE.Raycaster();
@@ -38,26 +39,41 @@ export function createBots(scene, world, ctx) {
     const teamColor = team === 'atk' ? PALETTE.teal : PALETTE.ember;
     const torsoMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(teamColor), roughness: 0.6, metalness: 0.05 });
     const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.85 });
+    const vestMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(team === 'atk' ? '#1d6a58' : '#a03a2a'), roughness: 0.8 });
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.78, 0.3), torsoMat);
     torso.position.y = 1.0;
     torso.userData.part = 'torso';
+    const vest = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.5, 0.32), vestMat);
+    vest.position.y = 1.05;
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 10), darkMat);
     head.position.y = 1.53;
     head.userData.part = 'head';
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), torsoMat);
+    helmet.position.y = 1.55;
+    helmet.userData.part = 'head';
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: new THREE.Color(teamColor), emissive: new THREE.Color(teamColor), emissiveIntensity: 0.9 }));
     visor.position.set(0, 1.55, 0.13);
     const gun = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.55), darkMat);
     gun.position.set(0.2, 1.05, -0.2);
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.62, 0.13), torsoMat);
+    armL.position.set(-0.32, 1.02, 0.05);
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.62, 0.13), torsoMat);
+    armR.position.set(0.32, 1.02, -0.08);
+    armR.rotation.x = -0.5;
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.62, 0.18), darkMat);
+    legL.position.set(-0.13, 0.31, 0);
+    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.62, 0.18), darkMat);
+    legR.position.set(0.13, 0.31, 0);
     const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor) }));
     marker.position.y = 1.95;
-    group.add(torso, head, visor, gun, marker);
+    group.add(torso, vest, head, helmet, visor, gun, armL, armR, legL, legR, marker);
     group.traverse((mesh) => {
       if (mesh.isMesh) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
       }
     });
-    return { group, torso, torsoMat, head, marker };
+    return { group, torso, torsoMat, head, helmet, marker };
   }
 
   function makeBot(team, index) {
@@ -93,6 +109,7 @@ export function createBots(scene, world, ctx) {
       fall: 0,
       defusing: false,
       flash: 0,
+      blindUntil: 0,
       grenades: 1,
       grenadeTimer: 10 + Math.random() * 12,
       routeLoops: 0,
@@ -102,7 +119,8 @@ export function createBots(scene, world, ctx) {
     bot.mag = WEAPONS[bot.weapon].mag;
     body.torso.userData.bot = bot;
     body.head.userData.bot = bot;
-    hitMeshes.push(body.torso, body.head);
+    body.helmet.userData.bot = bot;
+    hitMeshes.push(body.torso, body.head, body.helmet);
     list.push(bot);
     return bot;
   }
@@ -126,7 +144,6 @@ export function createBots(scene, world, ctx) {
     tmpDir.normalize();
     const forward = new THREE.Vector3(-Math.sin(s.yaw), 0, -Math.cos(s.yaw));
     if (forward.dot(tmpDir) < -0.15) return false;
-    // Smoke cuts the sightline: a cloud between eye and target hides the target.
     if (ctx.smoke && ctx.smoke.blocked(tmpEye, targetPos)) return false;
     raycaster.set(tmpEye, tmpDir);
     raycaster.far = distance;
@@ -176,32 +193,42 @@ export function createBots(scene, world, ctx) {
     tmpDir.z += (ctx.random() * 2 - 1) * spread;
     tmpDir.normalize();
     ctx.audio.shoot(true);
-    ctx.onShotFired(bot, tmpEye);
+    let hitPoint = null;
     if (target.kind === 'player') {
       tmpRay.set(tmpEye, tmpDir);
       const hit = tmpRay.intersectBox(playerBox(target.player), tmpTarget);
       if (hit) {
+        hitPoint = tmpTarget;
         const part = hit.y > target.player.mover.state.position.y + target.player.mover.state.height - 0.32 ? 'head' : 'torso';
-        // Base damage plus the weapon's head multiplier: damagePlayer applies
-        // the helmet reduction itself, so it needs both numbers, not the product.
         ctx.damagePlayer(def.damage, bot, part, def.headMult);
       }
+      if (hitPoint) tmpEnd.copy(hitPoint);
+      else tmpEnd.copy(tmpEye).addScaledVector(tmpDir, def.range);
+      ctx.onShotFired(bot, tmpEye, tmpEnd, hitPoint);
       return;
     }
     raycaster.set(tmpEye, tmpDir);
     raycaster.far = def.range;
     const hits = raycaster.intersectObjects(hitMeshes.concat(world.shootables), false);
     const first = hits[0];
-    if (first && first.object.userData.bot === target.bot) {
-      const part = first.object.userData.part;
-      damage(target.bot, def.damage * (part === 'head' ? def.headMult : 1), part, bot);
+    if (first) {
+      hitPoint = first.point;
+      tmpEnd.copy(first.point);
+      if (first.object.userData.bot === target.bot) {
+        const part = first.object.userData.part;
+        damage(target.bot, def.damage * (part === 'head' ? def.headMult : 1), part, bot);
+      }
+    } else {
+      tmpEnd.copy(tmpEye).addScaledVector(tmpDir, def.range);
     }
+    ctx.onShotFired(bot, tmpEye, tmpEnd, hitPoint);
   }
 
   function damage(bot, amount, part, attacker) {
     if (!bot.alive) return false;
     bot.hp -= amount;
     bot.flash = 1;
+    if (ctx.recordDamage) ctx.recordDamage(attacker, amount);
     if (bot.defusing) {
       bot.defusing = false;
       ctx.match.state.bomb.defuse = 0;
@@ -232,6 +259,7 @@ export function createBots(scene, world, ctx) {
       bot.routeIndex = 0;
       bot.routeLoops = 0;
       bot.flash = 0;
+      bot.blindUntil = 0;
       bot.grenades = 1;
       bot.grenadeTimer = 10 + ctx.random() * 12;
       bot.body.torsoMat.emissive.setScalar(0);
@@ -242,8 +270,6 @@ export function createBots(scene, world, ctx) {
     const defSpawns = world.spawns.def;
     const atkSpawns = world.spawns.atk;
     list.filter((b) => b.team === 'def').forEach((bot, index) => {
-      // Hollow takes the walkway: he spawns at the stair foot and climbs straight
-      // up to the high ground over site A, instead of crossing mid to get there.
       if (index === 1) {
         bot.mover.place(-20.4, 7, 0);
       } else {
@@ -252,7 +278,6 @@ export function createBots(scene, world, ctx) {
       bot.route = index === 1 ? world.waypoints.walkway : world.waypoints.defPatrol;
     });
     list.filter((b) => b.team === 'atk').forEach((bot, index) => {
-      // The player takes the middle spawn; the two friendly bots take the flanks.
       const spawn = atkSpawns[index === 0 ? 0 : 2];
       bot.mover.place(spawn.x, spawn.z, 0);
       bot.route = index === 0 ? world.waypoints.atkA : world.waypoints.atkB;
@@ -262,7 +287,6 @@ export function createBots(scene, world, ctx) {
 
   function think(bot, time) {
     const match = ctx.match.state;
-    // No fighting during the buy phase or after the round is decided.
     if (match.phase === 'buy' || match.phase === 'end') {
       bot.target = null;
       bot.state = 'patrol';
@@ -271,7 +295,7 @@ export function createBots(scene, world, ctx) {
     const enemies = [];
     if (bot.team === 'def') {
       const player = ctx.player;
-      if (player.alive) enemies.push({ kind: 'player', player, aimPoint: new THREE.Vector3(player.mover.state.position.x, player.mover.state.position.y + 1.2, player.mover.state.position.z), crouching: player.mover.state.crouching });
+      if (player.alive) enemies.push({ kind: 'player', player, aimPoint: new THREE.Vector3(player.mover.state.position.x, player.mover.state.position.y + (player.mover.state.crouching ? 0.9 : 1.2), player.mover.state.position.z), crouching: player.mover.state.crouching });
       for (const other of list) {
         if (other.team === 'atk' && other.alive) {
           enemies.push({ kind: 'bot', bot: other, aimPoint: new THREE.Vector3(other.mover.state.position.x, other.mover.state.position.y + 1.2, other.mover.state.position.z), crouching: false });
@@ -286,6 +310,12 @@ export function createBots(scene, world, ctx) {
     }
     let seen = null;
     let seenDistance = Infinity;
+    // Flashbanged: blind for ~2 s — no seeing, no shooting, stand still.
+    if (time < bot.blindUntil) {
+      bot.target = null;
+      bot.state = 'patrol';
+      return;
+    }
     for (const enemy of enemies) {
       if (sees(bot, enemy.aimPoint, enemy.crouching)) {
         const distance = bot.mover.state.position.distanceTo(enemy.aimPoint);
@@ -307,7 +337,6 @@ export function createBots(scene, world, ctx) {
       return;
     }
     bot.target = null;
-    // Bomb planted: defenders converge on the site, one defuses, the rest guard.
     if (match.phase === 'planted' && match.bomb.site) {
       if (bot.team === 'def') {
         const site = world.sites[match.bomb.site];
@@ -374,7 +403,13 @@ export function createBots(scene, world, ctx) {
         think(bot, time);
       }
 
-      if (bot.state === 'engage' && bot.target) {
+      const fire = ctx.inFire ? ctx.inFire(s.position) : null;
+      if (fire) {
+        tmpTarget.set(s.position.x - fire.center.x, 0, s.position.z - fire.center.z).normalize();
+        moveToward(bot, dt, { x: s.position.x + tmpTarget.x * 5, z: s.position.z + tmpTarget.z * 5 }, BOT_SPEED);
+      } else if (time < bot.blindUntil) {
+        bot.mover.step(dt, { forward: 0, strafe: 0, jump: false, crouch: false });
+      } else if (bot.state === 'engage' && bot.target) {
         const point = bot.target.kind === 'player' && !ctx.player.alive ? bot.lastSeen : bot.target.aimPoint;
         const aimPoint = bot.lastSeenTime > time - 1.2 && bot.lastSeen ? bot.lastSeen : point;
         aimAt(bot, aimPoint);
@@ -400,9 +435,6 @@ export function createBots(scene, world, ctx) {
             }
           }
         }
-        // A defender with a grenade left lobs one at a distant target it can see.
-        // The throw itself is quiet; the detonation is what the other bots hear
-        // (main.js calls bots.hear from onGrenadeExplode).
         if (bot.team === 'def' && bot.grenades > 0 && bot.target && bot.lastSeenTime > time - 0.5 && bot.grenadeTimer <= 0) {
           const distance = bot.mover.state.position.distanceTo(bot.target.aimPoint);
           if (distance > 14) {
@@ -416,8 +448,11 @@ export function createBots(scene, world, ctx) {
         }
       } else if (bot.state === 'defuse') {
         const site = world.sites[ctx.match.state.bomb.site];
-        const arrived = moveToward(bot, dt, { x: site.center.x, z: site.center.z }, BOT_SPEED);
-        if (arrived) {
+        const dx = site.center.x - bot.mover.state.position.x;
+        const dz = site.center.z - bot.mover.state.position.z;
+        const dist = Math.hypot(dx, dz);
+        moveToward(bot, dt, { x: site.center.x, z: site.center.z }, BOT_SPEED);
+        if (dist < 2) {
           bot.defusing = true;
           ctx.match.state.bomb.defuse += dt;
           ctx.match.state.bomb.defuser = bot;
@@ -452,7 +487,6 @@ export function createBots(scene, world, ctx) {
             bot.stuckPos = { x: s.position.x, z: s.position.z };
             if (bot.routeIndex === 0) {
               bot.routeLoops += 1;
-              // Attackers rotate: two full loops with no plant means the push is stale.
               if (bot.team === 'atk' && bot.routeLoops >= 2 && ctx.match.state.phase === 'live'
                 && !ctx.match.state.bomb.planted && time > 25 && ctx.random() < 0.5) {
                 bot.route = bot.route === world.waypoints.atkA ? world.waypoints.atkB : world.waypoints.atkA;
@@ -461,8 +495,6 @@ export function createBots(scene, world, ctx) {
             }
           } else {
             // Stuck: wedged on a wall or a stair face, no progress toward the point.
-            // After 3 s of standing still, skip the unreachable waypoint instead of
-            // standing there for the rest of the round.
             const moved = Math.hypot(s.position.x - bot.stuckPos.x, s.position.z - bot.stuckPos.z);
             if (moved > 0.3) {
               bot.stuckTimer = 0;

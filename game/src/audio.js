@@ -110,5 +110,13 @@ export function createAudio() {
     grenadePin() {
       tone(2000, 0.04, 'square', 0.12);
     },
+    swing() {
+      noise(0.14, 2600, 0.22);
+      tone(700, 0.12, 'sine', 0.1, 180);
+    },
+    flashPop() {
+      noise(0.25, 3200, 0.5);
+      tone(3200, 0.1, 'square', 0.16, 900);
+    },
   };
 }

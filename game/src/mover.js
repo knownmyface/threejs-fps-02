@@ -35,8 +35,6 @@ export function createMover(colliders, options = {}) {
   const probe = new THREE.Box3();
   const wish = new THREE.Vector3();
 
-  // lift keeps the feet and the crown out of the horizontal tests, so standing on the
-  // floor is not read as walking into a wall.
   function overlaps(x, y, z, height, lift) {
     probe.min.set(x - RADIUS, y + lift, z - RADIUS);
     probe.max.set(x + RADIUS, y + height - lift, z + RADIUS);
@@ -44,8 +42,6 @@ export function createMover(colliders, options = {}) {
     return null;
   }
 
-  // Try to step up onto a ledge: lift the body to the top of the blocker when the
-  // blocker is low enough and the space above it is free, then take the step.
   function tryStepUp(x, y, z, height) {
     const blocker = overlaps(x, y, z, height, 0.04);
     if (!blocker) return false;

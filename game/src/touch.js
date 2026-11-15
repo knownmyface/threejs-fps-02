@@ -6,7 +6,6 @@
 // flow is untouched. Buttons inject the same edge presses (KeyG/KeyH/KeyB)
 // the keyboard uses, so buy, grenade and smoke behave identically.
 const STICK_RADIUS = 52;
-const LOOK_SCALE = 2.5;
 
 export function createTouch(input, actions) {
   const coarse = window.matchMedia('(pointer: coarse)').matches;
@@ -20,6 +19,7 @@ export function createTouch(input, actions) {
   ui.innerHTML = `
     <div id="touch-stick"><div id="touch-knob"></div></div>
     <button type="button" class="touch-btn" id="touch-plant">HOLD TO PLANT</button>
+    <button type="button" class="touch-btn" id="touch-score">SCORE</button>
     <div id="touch-btns">
       <button type="button" class="touch-btn" id="touch-buy">BUY</button>
       <button type="button" class="touch-btn" id="touch-crouch">CROUCH</button>
@@ -37,7 +37,7 @@ export function createTouch(input, actions) {
   const knob = ui.querySelector('#touch-knob');
   const plantButton = ui.querySelector('#touch-plant');
   const buttons = {};
-  for (const id of ['buy', 'crouch', 'ads', 'swap', 'reload', 'frag', 'smoke', 'jump', 'fire']) {
+  for (const id of ['buy', 'crouch', 'ads', 'swap', 'reload', 'frag', 'smoke', 'jump', 'fire', 'score']) {
     buttons[id] = ui.querySelector(`#touch-${id}`);
   }
 
@@ -58,7 +58,6 @@ export function createTouch(input, actions) {
     const nx = (dx / length) * clamped;
     const ny = (dy / length) * clamped;
     knob.style.transform = `translate(${nx}px, ${ny}px)`;
-    // Analog: full tilt is full speed, half tilt is half speed.
     input.state.touchMove.x = nx / STICK_RADIUS;
     input.state.touchMove.y = ny / STICK_RADIUS;
   }
@@ -98,8 +97,8 @@ export function createTouch(input, actions) {
         stickVector(touch.clientX - stickBase.x, touch.clientY - stickBase.y);
         if (event.cancelable) event.preventDefault();
       } else if (touch.identifier === lookId) {
-        input.state.lookX += (touch.clientX - lookLast.x) * LOOK_SCALE;
-        input.state.lookY += (touch.clientY - lookLast.y) * LOOK_SCALE;
+        input.state.touchLookX += touch.clientX - lookLast.x;
+        input.state.touchLookY += touch.clientY - lookLast.y;
         lookLast = { x: touch.clientX, y: touch.clientY };
         if (event.cancelable) event.preventDefault();
       }
@@ -119,9 +118,6 @@ export function createTouch(input, actions) {
   window.addEventListener('touchend', onTouchEnd);
   window.addEventListener('touchcancel', onTouchEnd);
 
-  // Buttons: each handles its own touch so the window look/joystick handlers
-  // never see it. Hold-to-fire and hold-to-jump set state while held; the rest
-  // are taps. preventDefault stops the tap from also scrolling or zooming.
   function holdButton(button, down, up) {
     button.addEventListener('touchstart', (event) => {
       event.preventDefault();
@@ -145,8 +141,8 @@ export function createTouch(input, actions) {
   }
 
   holdButton(buttons.fire,
-    () => { input.state.firing = true; },
-    () => { input.state.firing = false; });
+    () => { input.pressFire(); },
+    () => { input.releaseFire(); });
   holdButton(buttons.jump,
     () => { input.state.keys.add('Space'); },
     () => { input.state.keys.delete('Space'); });
@@ -164,18 +160,14 @@ export function createTouch(input, actions) {
     buttons.ads.classList.toggle('on', input.state.scoped);
   });
   tapButton(buttons.swap, () => actions.cycleWeapon());
+  tapButton(buttons.score, () => actions.toggleScoreboard());
   tapButton(buttons.frag, () => input.press('KeyG'));
   tapButton(buttons.smoke, () => input.press('KeyH'));
   tapButton(buttons.buy, () => input.press('KeyB'));
-  // Plant: hold the button while standing in a site; main.js shows it only
-  // when planting is actually possible (live round, bomb carried, in a site).
   holdButton(plantButton,
     () => { input.state.keys.add('KeyE'); },
     () => { input.state.keys.delete('KeyE'); });
 
-  // While a menu or overlay is up, the touch controls hide so they never cover
-  // a button the player has to tap. The buy menu's own Close button (in the
-  // menu) is the way back on touch.
   const buyMenu = document.getElementById('buy-menu');
   const overlay = document.getElementById('overlay');
   function syncMenus() {

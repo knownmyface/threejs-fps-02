@@ -1,85 +1,103 @@
-// Weapons: the numbers table, the view models, and the grenade. One module owns every
+// Weapons: the numbers table, the view models, and the grenades. One module owns every
 // gun; main.js owns the ray and the damage, bots own their own trigger pulls through the
 // same table. A head shot pays the head multiplier; moving pays in spread.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
+import { starTexture } from './effects.js';
 
 export const WEAPONS = {
-  pistol: {
-    name: 'P-9 Sidearm', price: 0, damage: 25, headMult: 3, mag: 12, reserve: 60,
-    fireGap: 0.16, auto: false, spreadStill: 0.004, spreadMove: 0.02, reloadTime: 1.4, range: 60,
-    adsSpreadMult: 0.5, adsFov: 60, adsMoveMult: 0.6,
-  },
-  rifle: {
-    name: 'Dingo-7 Rifle', price: 1500, damage: 34, headMult: 3, mag: 30, reserve: 90,
-    fireGap: 0.096, auto: true, spreadStill: 0.0022, spreadMove: 0.028, reloadTime: 1.9, range: 80,
-    adsSpreadMult: 0.45, adsFov: 58, adsMoveMult: 0.6,
-  },
-  smg: {
-    name: 'Wasp-9 SMG', price: 900, damage: 22, headMult: 3, mag: 32, reserve: 128,
-    fireGap: 0.07, auto: true, spreadStill: 0.006, spreadMove: 0.032, reloadTime: 1.6, range: 45,
-    adsSpreadMult: 0.5, adsFov: 62, adsMoveMult: 0.65,
-  },
-  sniper: {
-    name: 'Kestrel .50', price: 2800, damage: 90, headMult: 2.8, mag: 5, reserve: 15,
-    fireGap: 1.1, auto: false, spreadStill: 0.0004, spreadMove: 0.05, reloadTime: 2.6, range: 120,
-    adsSpreadMult: 0.4, adsFov: 30, adsMoveMult: 0.5,
-  },
+  pistol: { name: 'P-9 Sidearm', price: 0, damage: 25, headMult: 3, mag: 12, reserve: 60, fireGap: 0.16, auto: false, spreadStill: 0.004, spreadMove: 0.02, reloadTime: 1.4, range: 60, adsSpreadMult: 0.5, adsFov: 60, adsMoveMult: 0.6, kick: 0.055, cls: 'pistol', note: 'Standard sidearm' },
+  p250: { name: 'P250', price: 300, damage: 38, headMult: 3, mag: 13, reserve: 52, fireGap: 0.15, auto: false, spreadStill: 0.004, spreadMove: 0.02, reloadTime: 1.5, range: 55, adsSpreadMult: 0.5, adsFov: 60, adsMoveMult: 0.6, kick: 0.06, cls: 'pistol', note: 'Hard-hitting pistol' },
+  deagle: { name: 'Desert Eagle', price: 700, damage: 53, headMult: 3, mag: 7, reserve: 28, fireGap: 0.3, auto: false, spreadStill: 0.003, spreadMove: 0.025, reloadTime: 2.0, range: 65, adsSpreadMult: 0.45, adsFov: 58, adsMoveMult: 0.55, kick: 0.1, cls: 'pistol', note: 'Slow, heavy, huge damage' },
+  tec9: { name: 'Tec-9', price: 500, damage: 26, headMult: 3, mag: 18, reserve: 90, fireGap: 0.11, auto: false, spreadStill: 0.008, spreadMove: 0.035, reloadTime: 1.7, range: 45, adsSpreadMult: 0.5, adsFov: 60, adsMoveMult: 0.65, kick: 0.05, cls: 'pistol', note: 'Fast, inaccurate' },
+  dualies: { name: 'Dual Berettas', price: 300, damage: 24, headMult: 3, mag: 30, reserve: 90, fireGap: 0.09, auto: false, spreadStill: 0.009, spreadMove: 0.035, reloadTime: 1.8, range: 40, adsSpreadMult: 0.5, adsFov: 60, adsMoveMult: 0.65, kick: 0.045, cls: 'pistol', note: 'Two guns, 30-round mag' },
+  nova: { name: 'Nova', price: 1050, damage: 26, headMult: 2, mag: 8, reserve: 24, fireGap: 0.9, auto: false, spreadStill: 0.03, spreadMove: 0.05, reloadTime: 2.4, range: 30, adsSpreadMult: 0.6, adsFov: 62, adsMoveMult: 0.6, kick: 0.11, pellets: 8, falloff: true, cls: 'primary', note: 'Pump shotgun, 8 pellets' },
+  xm1014: { name: 'XM1014', price: 2000, damage: 22, headMult: 2, mag: 7, reserve: 28, fireGap: 0.28, auto: true, spreadStill: 0.025, spreadMove: 0.045, reloadTime: 2.6, range: 30, adsSpreadMult: 0.6, adsFov: 62, adsMoveMult: 0.6, kick: 0.09, pellets: 7, falloff: true, cls: 'primary', note: 'Auto shotgun, 7 shells' },
+  smg: { name: 'MP5', price: 1500, damage: 22, headMult: 3, mag: 32, reserve: 128, fireGap: 0.07, auto: true, spreadStill: 0.006, spreadMove: 0.032, reloadTime: 1.6, range: 45, adsSpreadMult: 0.5, adsFov: 62, adsMoveMult: 0.65, kick: 0.05, cls: 'primary', note: 'Reliable SMG' },
+  p90: { name: 'P90', price: 2350, damage: 19, headMult: 3, mag: 50, reserve: 100, fireGap: 0.06, auto: true, spreadStill: 0.008, spreadMove: 0.035, reloadTime: 2.2, range: 40, adsSpreadMult: 0.5, adsFov: 62, adsMoveMult: 0.65, kick: 0.04, cls: 'primary', note: '50-round mag, very fast' },
+  mac10: { name: 'MAC-10', price: 1050, damage: 24, headMult: 3, mag: 30, reserve: 90, fireGap: 0.055, auto: true, spreadStill: 0.012, spreadMove: 0.045, reloadTime: 1.5, range: 35, adsSpreadMult: 0.5, adsFov: 62, adsMoveMult: 0.65, kick: 0.05, cls: 'primary', note: 'Cheap, very fast, wild' },
+  rifle: { name: 'Galil AR', price: 1800, damage: 34, headMult: 3, mag: 30, reserve: 90, fireGap: 0.096, auto: true, spreadStill: 0.0022, spreadMove: 0.028, reloadTime: 1.9, range: 80, adsSpreadMult: 0.45, adsFov: 58, adsMoveMult: 0.6, kick: 0.055, cls: 'primary', note: 'Workhorse rifle' },
+  m4: { name: 'M4', price: 3100, damage: 33, headMult: 3, mag: 30, reserve: 90, fireGap: 0.09, auto: true, spreadStill: 0.0018, spreadMove: 0.022, reloadTime: 2.0, range: 85, adsSpreadMult: 0.4, adsFov: 56, adsMoveMult: 0.6, kick: 0.05, cls: 'primary', note: 'Balanced, accurate' },
+  ak47: { name: 'AK-47', price: 2700, damage: 36, headMult: 3, mag: 30, reserve: 90, fireGap: 0.1, auto: true, spreadStill: 0.0035, spreadMove: 0.035, reloadTime: 2.1, range: 85, adsSpreadMult: 0.45, adsFov: 58, adsMoveMult: 0.6, kick: 0.07, cls: 'primary', note: 'Harder hits, more recoil' },
+  sniper: { name: 'SSG 08', price: 1700, damage: 90, headMult: 2.8, mag: 5, reserve: 15, fireGap: 1.1, auto: false, spreadStill: 0.0004, spreadMove: 0.05, reloadTime: 2.6, range: 120, adsSpreadMult: 0.4, adsFov: 30, adsMoveMult: 0.5, kick: 0.12, cls: 'primary', note: 'Cheap scoped rifle' },
+  sg553: { name: 'SG 553', price: 3000, damage: 30, headMult: 3, mag: 30, reserve: 90, fireGap: 0.11, auto: true, spreadStill: 0.002, spreadMove: 0.025, reloadTime: 2.0, range: 90, adsSpreadMult: 0.35, adsFov: 45, adsMoveMult: 0.55, kick: 0.055, cls: 'primary', note: 'Scoped rifle, accurate' },
+  awp: { name: 'AWP', price: 4750, damage: 110, headMult: 2.5, mag: 5, reserve: 20, fireGap: 1.4, auto: false, spreadStill: 0.0003, spreadMove: 0.06, reloadTime: 2.8, range: 130, adsSpreadMult: 0.3, adsFov: 25, adsMoveMult: 0.5, kick: 0.14, moveMult: 0.9, cls: 'primary', note: 'One-shot torso, scoped' },
+  knife: { name: 'Tactical Knife', price: 0, damage: 40, headMult: 1, mag: 1, reserve: 0, fireGap: 0.45, auto: false, spreadStill: 0, spreadMove: 0, reloadTime: 0, range: 2.0, adsSpreadMult: 1, adsFov: 74, adsMoveMult: 1, kick: 0, moveMult: 1.25, melee: true, cls: 'melee', note: 'Default. Faster movement.' },
 };
 
 export const GRENADE_PRICE = 300;
-export const SMOKE_PRICE = 400;
+export const SMOKE_PRICE = 300;
+export const FLASH_PRICE = 200;
+export const MOLOTOV_PRICE = 400;
+export const DECOY_PRICE = 50;
 export const ARMOR_PRICE = 650;
 export const HELMET_PRICE = 350;
-// A helmet turns a head shot's multiplier down to this: the same rifle head
-// shot that deals 3x damage deals 1.25x through a helmet.
 export const HELMET_HEAD_MULT = 1.25;
 
 function buildViewModel(id) {
   const grip = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.7, metalness: 0.2 });
   const body = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ink), roughness: 0.5, metalness: 0.35 });
   const accent = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.accent), roughness: 0.5, metalness: 0.2 });
+  const steel = new THREE.MeshStandardMaterial({ color: new THREE.Color('#b8b0a4'), roughness: 0.35, metalness: 0.7 });
+  const wood = new THREE.MeshStandardMaterial({ color: new THREE.Color('#8a5a28'), roughness: 0.7, metalness: 0 });
   const model = new THREE.Group();
-  if (id === 'pistol') {
-    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.22), body);
-    const gripMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.07), grip);
-    gripMesh.position.set(0, -0.08, 0.08);
-    model.add(slide, gripMesh);
+  const part = (mat, w, h, d, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    model.add(m);
+    return m;
+  };
+  if (id === 'knife') {
+    const blade = part(steel, 0.015, 0.05, 0.3, 0, 0.01, -0.2);
+    blade.rotation.x = -0.15;
+    part(grip, 0.03, 0.05, 0.12, 0, -0.01, 0.02);
+    model.position.set(0.22, -0.22, -0.38);
+  } else if (id === 'pistol' || id === 'p250' || id === 'deagle' || id === 'tec9' || id === 'dualies') {
+    const len = id === 'deagle' ? 0.3 : id === 'tec9' ? 0.26 : 0.22;
+    part(body, 0.05, 0.06, len, 0, 0, -0.05);
+    part(grip, 0.05, 0.12, 0.07, 0, -0.08, 0.06);
+    if (id === 'dualies') {
+      part(body, 0.05, 0.06, 0.22, 0.12, -0.01, -0.05);
+      part(grip, 0.05, 0.12, 0.07, 0.12, -0.09, 0.06);
+    }
+    if (id === 'deagle') part(accent, 0.052, 0.02, 0.1, 0, 0.035, -0.12);
+    if (id === 'tec9') part(accent, 0.05, 0.05, 0.06, 0, 0.02, -0.18);
     model.position.set(0.2, -0.2, -0.36);
-  } else if (id === 'smg') {
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.3), body);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.22), grip);
-    barrel.position.set(0, 0.02, -0.25);
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.06), accent);
-    mag.position.set(0, -0.11, -0.02);
-    model.add(receiver, barrel, mag);
+  } else if (id === 'nova' || id === 'xm1014') {
+    part(body, 0.09, 0.1, 0.42, 0, 0, 0);
+    part(grip, 0.05, 0.05, 0.5, 0, 0.02, -0.4);
+    part(accent, 0.07, 0.07, 0.14, 0, -0.03, -0.28);
+    part(grip, 0.06, 0.08, 0.2, 0, -0.02, 0.3);
+    if (id === 'xm1014') part(accent, 0.05, 0.14, 0.06, 0, -0.11, 0);
+    model.position.set(0.24, -0.2, -0.44);
+  } else if (id === 'smg' || id === 'p90' || id === 'mac10') {
+    part(body, 0.08, 0.09, 0.3, 0, 0, 0);
+    part(grip, 0.04, 0.04, 0.22, 0, 0.02, -0.25);
+    part(accent, 0.05, id === 'p90' ? 0.1 : 0.16, 0.06, 0, -0.11, -0.02);
+    if (id === 'p90') part(body, 0.09, 0.05, 0.34, 0, 0.06, -0.02);
     model.position.set(0.22, -0.2, -0.4);
-  } else if (id === 'sniper') {
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.5), body);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.55), grip);
-    barrel.position.set(0, 0.02, -0.5);
+  } else if (id === 'sniper' || id === 'awp' || id === 'sg553') {
+    part(body, 0.07, 0.09, 0.5, 0, 0, 0);
+    part(grip, 0.035, 0.035, id === 'awp' ? 0.65 : 0.55, 0, 0.02, -0.5);
     const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 12), accent);
     scope.rotation.x = Math.PI / 2;
     scope.position.set(0, 0.08, -0.05);
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.07, 0.2), grip);
-    stock.position.set(0, -0.02, 0.32);
-    model.add(receiver, barrel, scope, stock);
+    model.add(scope);
+    part(grip, 0.06, 0.07, 0.2, 0, -0.02, 0.32);
     model.position.set(0.24, -0.21, -0.46);
   } else {
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.42), body);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.4), grip);
-    barrel.position.set(0, 0.025, -0.38);
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.08, 0.22), grip);
-    stock.position.set(0, -0.02, 0.3);
-    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.05, 0.06), accent);
-    sight.position.set(0, 0.07, -0.1);
-    model.add(receiver, barrel, stock, sight);
+    part(body, 0.09, 0.1, 0.42, 0, 0, 0);
+    part(grip, 0.045, 0.045, 0.4, 0, 0.025, -0.38);
+    part(grip, 0.075, 0.08, 0.22, 0, -0.02, 0.3);
+    part(accent, 0.02, 0.05, 0.06, 0, 0.07, -0.1);
+    if (id === 'm4') part(accent, 0.04, 0.12, 0.05, 0, -0.1, 0.05);
+    if (id === 'ak47') part(wood, 0.05, 0.1, 0.06, 0, -0.09, 0.08);
     model.position.set(0.24, -0.2, -0.42);
   }
+  model.userData.baseZ = model.position.z;
   return model;
 }
 
-// The player's arsenal: one view model per weapon, ammo tracked per weapon, one active.
 export function createArsenal(camera, audio) {
   const models = {};
   for (const id of Object.keys(WEAPONS)) {
@@ -89,8 +107,8 @@ export function createArsenal(camera, audio) {
     models[id] = model;
   }
   const flash = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.24, 0.24),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(PALETTE.accent), transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }),
+    new THREE.PlaneGeometry(0.42, 0.42),
+    new THREE.MeshBasicMaterial({ map: starTexture(), transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }),
   );
   flash.position.set(0.24, -0.18, -0.95);
   flash.visible = false;
@@ -101,9 +119,9 @@ export function createArsenal(camera, audio) {
 
   const items = {};
   for (const id of Object.keys(WEAPONS)) {
-    items[id] = { mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve, owned: id === 'pistol' };
+    items[id] = { mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve, owned: id === 'pistol' || id === 'knife' };
   }
-  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, smokes: 0, scoped: false };
+  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, smokes: 0, flashes: 0, molotovs: 0, decoys: 0, grenadeSel: 'grenade', scoped: false, swing: 0, primarySlot: null, secondarySlot: 'pistol' };
   models.pistol.visible = true;
 
   function def() {
@@ -113,10 +131,12 @@ export function createArsenal(camera, audio) {
   function step(dt) {
     state.cooldown = Math.max(0, state.cooldown - dt);
     state.flash = Math.max(0, state.flash - dt);
+    state.swing = Math.max(0, state.swing - dt);
     state.kick += (0 - state.kick) * Math.min(1, dt * 14);
     const model = models[state.current];
-    model.position.z = (state.current === 'sniper' ? -0.46 : state.current === 'smg' ? -0.4 : state.current === 'pistol' ? -0.36 : -0.42) + state.kick;
+    model.position.z = model.userData.baseZ + state.kick;
     model.rotation.x = state.kick * 2.2;
+    model.rotation.z = state.swing > 0 ? -state.swing * 4 : 0;
     flash.visible = state.flash > 0;
     flash.rotation.z = state.flash * 30;
     flashLight.intensity = state.flash > 0 ? 18 : 0;
@@ -150,9 +170,14 @@ export function createArsenal(camera, audio) {
     },
     pullTrigger() {
       state.cooldown = def().fireGap;
-      state.flash = 0.06;
-      state.kick = state.current === 'sniper' ? 0.12 : 0.055;
+      state.flash = 0.09;
+      state.kick = def().kick;
       audio.shoot(false);
+    },
+    swing() {
+      state.cooldown = def().fireGap;
+      state.swing = 0.25;
+      audio.swing();
     },
     reload() {
       const item = items[state.current];
@@ -172,6 +197,8 @@ export function createArsenal(camera, audio) {
       models[id].visible = true;
       state.cooldown = Math.max(state.cooldown, 0.25);
       state.scoped = false;
+      if (WEAPONS[id].cls === 'primary') state.primarySlot = id;
+      if (WEAPONS[id].cls === 'pistol') state.secondarySlot = id;
       return true;
     },
     buy(id) {
@@ -184,10 +211,15 @@ export function createArsenal(camera, audio) {
     resetRound(keepLoadout) {
       if (!keepLoadout) {
         for (const id of Object.keys(items)) {
-          if (id !== 'pistol') items[id].owned = false;
+          if (id !== 'pistol' && id !== 'knife') items[id].owned = false;
         }
         state.grenades = 0;
         state.smokes = 0;
+        state.flashes = 0;
+        state.molotovs = 0;
+        state.decoys = 0;
+        state.grenadeSel = 'grenade';
+        state.primarySlot = null;
         state.current = 'pistol';
         for (const id of Object.keys(models)) models[id].visible = id === 'pistol';
       }
@@ -201,12 +233,12 @@ export function createArsenal(camera, audio) {
       state.reloadLeft = 0;
       state.flash = 0;
       state.kick = 0;
+      state.swing = 0;
       state.scoped = false;
     },
   };
 }
 
-// Grenades: a thrown sphere with an arc, a fuse, and a radius falloff on explode.
 export function createGrenades(scene, colliders, onExplode) {
   const geometry = new THREE.SphereGeometry(0.09, 10, 8);
   const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ember), roughness: 0.4, metalness: 0.4 });
@@ -264,9 +296,6 @@ export function createGrenades(scene, colliders, onExplode) {
   };
 }
 
-// Smoke: a thrown canister that pops into a grey cloud. The cloud blocks sight, not
-// bullets — a bot whose line of sight crosses a cloud cannot see through it, so smoke
-// cuts sightlines for pushes and defuses. One cloud is a dozen puffs in a ball.
 export function createSmoke(scene, colliders) {
   const puffGeometry = new THREE.SphereGeometry(1, 10, 8);
   const puffMaterial = new THREE.MeshStandardMaterial({ color: new THREE.Color('#8d8578'), transparent: true, opacity: 0.5, roughness: 1, metalness: 0, depthWrite: false });
@@ -365,6 +394,106 @@ export function createSmoke(scene, colliders) {
         position: mesh.position,
         velocity: direction.clone().multiplyScalar(speed).add(new THREE.Vector3(0, 3.2, 0)),
         timer: 1.4,
+      });
+    },
+  };
+}
+
+export function createLobbed(scene, colliders) {
+  const mats = {
+    flash: new THREE.MeshStandardMaterial({ color: new THREE.Color('#e8e4da'), roughness: 0.3, metalness: 0.6, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.4 }),
+    molotov: new THREE.MeshStandardMaterial({ color: new THREE.Color('#7a4a1a'), roughness: 0.2, metalness: 0.1, emissive: new THREE.Color('#e07830'), emissiveIntensity: 0.5 }),
+    decoy: new THREE.MeshStandardMaterial({ color: new THREE.Color('#3a3f45'), roughness: 0.4, metalness: 0.7, emissive: new THREE.Color('#e2543e'), emissiveIntensity: 0.2 }),
+  };
+  const geoms = {
+    flash: new THREE.SphereGeometry(0.09, 10, 8),
+    molotov: new THREE.CylinderGeometry(0.07, 0.07, 0.22, 10),
+    decoy: new THREE.SphereGeometry(0.1, 10, 8),
+  };
+  const list = [];
+  const probe = new THREE.Box3();
+
+  function step(dt) {
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+      const item = list[index];
+      if (item.armed) {
+        item.shotTimer -= dt;
+        if (item.shotTimer <= 0) {
+          item.shotTimer = 0.4;
+          item.onShot(item.position);
+        }
+        item.life -= dt;
+        item.mesh.material.emissiveIntensity = (item.life * 10) % 1 < 0.5 ? 1.6 : 0.2;
+        if (item.life <= 0) {
+          scene.remove(item.mesh);
+          list.splice(index, 1);
+        }
+        continue;
+      }
+      item.velocity.y -= 14 * dt;
+      item.position.addScaledVector(item.velocity, dt);
+      probe.min.set(item.position.x - 0.09, item.position.y - 0.09, item.position.z - 0.09);
+      probe.max.set(item.position.x + 0.09, item.position.y + 0.09, item.position.z + 0.09);
+      let hit = false;
+      for (const collider of colliders) {
+        if (probe.intersectsBox(collider)) { hit = true; break; }
+      }
+      if (hit) {
+        item.velocity.multiplyScalar(-0.35);
+        item.position.y = Math.max(item.position.y, 0.1);
+      }
+      if (item.position.y < 0.09) {
+        item.position.y = 0.09;
+        item.velocity.y = Math.abs(item.velocity.y) * 0.35;
+        item.velocity.x *= 0.7;
+        item.velocity.z *= 0.7;
+      }
+      const landed = hit || item.position.y <= 0.1;
+      if (item.kind === 'molotov' && landed) {
+        scene.remove(item.mesh);
+        list.splice(index, 1);
+        item.onLand(item.position);
+        continue;
+      }
+      item.fuse -= dt;
+      if (item.fuse <= 0) {
+        if (item.kind === 'decoy') {
+          item.armed = true;
+          item.life = 6;
+          item.shotTimer = 0.1;
+          item.velocity.set(0, 0, 0);
+        } else {
+          scene.remove(item.mesh);
+          list.splice(index, 1);
+          item.onFuse(item.position);
+        }
+      }
+    }
+  }
+
+  return {
+    step,
+    clear() {
+      for (const item of list) scene.remove(item.mesh);
+      list.length = 0;
+    },
+    throwFrom(position, direction, kind, hooks, speed = 13) {
+      const mesh = new THREE.Mesh(geoms[kind], mats[kind]);
+      mesh.position.copy(position);
+      mesh.castShadow = true;
+      scene.add(mesh);
+      list.push({
+        mesh,
+        position: mesh.position,
+        velocity: direction.clone().multiplyScalar(speed).add(new THREE.Vector3(0, 3.5, 0)),
+        fuse: kind === 'flash' ? 1.6 : 2.5,
+        kind,
+        armed: false,
+        life: 0,
+        shotTimer: 0,
+        onFuse: hooks.onFuse || (() => {}),
+        onLand: hooks.onLand || (() => {}),
+        onShot: hooks.onShot || (() => {}),
       });
     },
   };

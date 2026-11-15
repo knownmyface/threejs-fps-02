@@ -4,7 +4,8 @@
 export function createInput(canvas, onLockChange) {
   const keys = new Set();
   const pressed = new Set();
-  const state = { keys, locked: false, firing: false, scoped: false, lookX: 0, lookY: 0 };
+  const state = { keys, locked: false, firing: false, scoped: false, lookX: 0, lookY: 0, touchLookX: 0, touchLookY: 0, mouseSens: 1, touchSens: 1 };
+  let firePressed = false;
 
   function setKey(event, down) {
     if (down) {
@@ -13,7 +14,7 @@ export function createInput(canvas, onLockChange) {
     } else {
       keys.delete(event.code);
     }
-    if (event.code === 'Space') event.preventDefault();
+    if (event.code === 'Space' || event.code === 'Tab') event.preventDefault();
   }
 
   window.addEventListener('keydown', (event) => setKey(event, true));
@@ -29,7 +30,7 @@ export function createInput(canvas, onLockChange) {
   });
   window.addEventListener('mousedown', (event) => {
     if (!state.locked) return;
-    if (event.button === 0) state.firing = true;
+    if (event.button === 0) { state.firing = true; firePressed = true; }
     if (event.button === 2) state.scoped = true;
   });
   window.addEventListener('mouseup', (event) => {
@@ -52,17 +53,12 @@ export function createInput(canvas, onLockChange) {
   return {
     state,
     requestLock() {
-      // Pointer lock does not exist on touch devices: a failed request must be a
-      // silent no-op, never an uncaught rejection that leaves the game stuck.
       try {
         const result = canvas.requestPointerLock();
         if (result && typeof result.catch === 'function') result.catch(() => {});
       } catch (_) {
-        // No pointer lock on this device; the touch path starts without it.
       }
     },
-    // Inject an edge-triggered press (grenade, buy, weapon keys) from touch
-    // buttons, through the same path the keyboard uses.
     press(code) {
       pressed.add(code);
     },
@@ -71,6 +67,25 @@ export function createInput(canvas, onLockChange) {
       const y = state.lookY;
       state.lookX = 0;
       state.lookY = 0;
+      return { x, y };
+    },
+    pressFire() {
+      state.firing = true;
+      firePressed = true;
+    },
+    releaseFire() {
+      state.firing = false;
+    },
+    takeFirePressed() {
+      const was = firePressed;
+      firePressed = false;
+      return was;
+    },
+    takeTouchLook() {
+      const x = state.touchLookX;
+      const y = state.touchLookY;
+      state.touchLookX = 0;
+      state.touchLookY = 0;
       return { x, y };
     },
     takePressed(code) {
