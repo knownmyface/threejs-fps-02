@@ -1,7 +1,7 @@
 // The DOM HUD: health, armour, ammo, money, timer, score, kill feed and every overlay
 // panel. It never touches the simulation; main.js pushes numbers in and reads the play,
 // buy and restart callbacks out.
-import { WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE } from './weapons.js';
+import { WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE, HELMET_PRICE } from './weapons.js';
 
 const COPY = {
   start: {
@@ -17,7 +17,7 @@ const COPY = {
   down: {
     title: 'You are down',
     copy: 'Your team fights on without you. Watch a teammate until the round ends.',
-    action: 'Spectating',
+    action: 'Watch teammate',
   },
   roundEnd: {
     title: '',
@@ -38,6 +38,7 @@ const BUY_ITEMS = [
   { id: 'grenade', key: '4' },
   { id: 'armor', key: '5' },
   { id: 'smoke', key: '6' },
+  { id: 'helmet', key: '7' },
 ];
 
 export function createHud(onBuy) {
@@ -77,8 +78,8 @@ export function createHud(onBuy) {
     row.type = 'button';
     row.className = 'buy-row';
     row.dataset.item = item.id;
-    const label = item.id === 'grenade' ? 'Frag grenade' : item.id === 'smoke' ? 'Smoke grenade' : item.id === 'armor' ? 'Kevlar armour' : WEAPONS[item.id].name;
-    const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'smoke' ? SMOKE_PRICE : item.id === 'armor' ? ARMOR_PRICE : WEAPONS[item.id].price;
+    const label = item.id === 'grenade' ? 'Frag grenade' : item.id === 'smoke' ? 'Smoke grenade' : item.id === 'armor' ? 'Kevlar Vest — absorbs 50% damage' : item.id === 'helmet' ? 'Helmet — headshots deal 1.25x' : WEAPONS[item.id].name;
+    const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'smoke' ? SMOKE_PRICE : item.id === 'armor' ? ARMOR_PRICE : item.id === 'helmet' ? HELMET_PRICE : WEAPONS[item.id].price;
     row.innerHTML = `<span class="buy-key">${item.key}</span><span class="buy-label">${label}</span><span class="buy-price">$${price}</span>`;
     row.addEventListener('click', () => onBuy(item.id));
     buyItems.appendChild(row);
@@ -92,10 +93,11 @@ export function createHud(onBuy) {
   }
 
   return {
-    setHealth(hp, armor) {
+    setHealth(hp, armor, helmet = false) {
       healthFill.style.width = `${Math.max(0, Math.min(100, hp))}%`;
       setText(healthValue, String(Math.ceil(Math.max(0, hp))), 'hp');
-      setText(armorValue, armor > 0 ? `+${Math.ceil(armor)}` : '', 'armor');
+      const armorText = armor > 0 && helmet ? `+${Math.ceil(armor)} · HELMET` : armor > 0 ? `+${Math.ceil(armor)}` : helmet ? 'HELMET' : '';
+      setText(armorValue, armorText, 'armor');
       healthFill.classList.toggle('low', hp <= 30);
     },
     setAmmo(mag, reserve) {
@@ -113,7 +115,7 @@ export function createHud(onBuy) {
       setText(moneyValue, `$${value}`, 'money');
       setText(buyMoney, `$${value}`, 'buyMoney');
       for (const item of BUY_ITEMS) {
-        const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'smoke' ? SMOKE_PRICE : item.id === 'armor' ? ARMOR_PRICE : WEAPONS[item.id].price;
+        const price = item.id === 'grenade' ? GRENADE_PRICE : item.id === 'smoke' ? SMOKE_PRICE : item.id === 'armor' ? ARMOR_PRICE : item.id === 'helmet' ? HELMET_PRICE : WEAPONS[item.id].price;
         itemRows[item.id].classList.toggle('cant', value < price);
       }
     },

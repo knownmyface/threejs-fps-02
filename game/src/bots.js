@@ -182,7 +182,9 @@ export function createBots(scene, world, ctx) {
       const hit = tmpRay.intersectBox(playerBox(target.player), tmpTarget);
       if (hit) {
         const part = hit.y > target.player.mover.state.position.y + target.player.mover.state.height - 0.32 ? 'head' : 'torso';
-        ctx.damagePlayer(def.damage * (part === 'head' ? def.headMult : 1), bot, part);
+        // Base damage plus the weapon's head multiplier: damagePlayer applies
+        // the helmet reduction itself, so it needs both numbers, not the product.
+        ctx.damagePlayer(def.damage, bot, part, def.headMult);
       }
       return;
     }

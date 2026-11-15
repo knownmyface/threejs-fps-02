@@ -6,8 +6,9 @@ import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { createWorld } from './world.js';
 import { createInput } from './input.js';
+import { createTouch } from './touch.js';
 import { createMover } from './mover.js';
-import { createArsenal, createGrenades, createSmoke, WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE } from './weapons.js';
+import { createArsenal, createGrenades, createSmoke, WEAPONS, GRENADE_PRICE, SMOKE_PRICE, ARMOR_PRICE, HELMET_PRICE, HELMET_HEAD_MULT } from './weapons.js';
 import { createBots } from './bots.js';
 import { createMatch, BUY_SECONDS, ROUND_SECONDS, PLANT_SECONDS } from './rounds.js';
 import { createHud } from './hud.js';
@@ -52,6 +53,22 @@ const arsenal = createArsenal(camera, audio);
 const hud = createHud(buyItem);
 const minimap = createMinimap(document.getElementById('minimap'));
 const input = createInput(renderer.domElement, onLockChange);
+// Next owned weapon, for the touch SWAP button (the keyboard uses 1–4).
+function cycleWeapon() {
+  const order = ['pistol', 'rifle', 'smg', 'sniper'];
+  const index = order.indexOf(arsenal.state.current);
+  for (let offset = 1; offset <= order.length; offset += 1) {
+    const next = order[(index + offset) % order.length];
+    if (arsenal.items[next].owned && arsenal.select(next)) return;
+  }
+}
+const touch = createTouch(input, { cycleWeapon });
+if (touch.active) {
+  document.body.classList.add('touch');
+  document.getElementById('desktop-keys').hidden = true;
+  document.getElementById('touch-keys').hidden = false;
+}
+document.getElementById('buy-close').addEventListener('click', () => input.press('KeyB'));
 const raycaster = new THREE.Raycaster();
 raycaster.far = 120;
 
@@ -59,6 +76,7 @@ const player = {
   mover: playerMover,
   hp: 100,
   armor: 0,
+  helmet: false,
   alive: true,
 };
 
@@ -145,11 +163,14 @@ function siteAt(position) {
   return null;
 }
 
-function damagePlayer(amount, attacker, part) {
+function damagePlayer(base, attacker, part, headMult = 1) {
   // A staged screenshot (?shot=...) is a photo setup: the player cannot die
   // mid-setup while the other bots keep shooting. Live play is unaffected.
   if (shot) return;
   if (!player.alive) return;
+  // A helmet turns a head shot's multiplier down to HELMET_HEAD_MULT: the same
+  // rifle head shot that deals 3x damage deals 1.25x through a helmet.
+  let amount = base * (part === 'head' ? (player.helmet ? HELMET_HEAD_MULT : headMult) : 1);
   let remaining = amount;
   if (player.armor > 0) {
     const absorbed = Math.min(player.armor, remaining * 0.5);
@@ -267,7 +288,7 @@ function shoot(spread) {
 function buyItem(id) {
   const state = match.state;
   if (state.phase !== 'buy') return;
-  const price = id === 'grenade' ? GRENADE_PRICE : id === 'smoke' ? SMOKE_PRICE : id === 'armor' ? ARMOR_PRICE : WEAPONS[id].price;
+  const price = id === 'grenade' ? GRENADE_PRICE : id === 'smoke' ? SMOKE_PRICE : id === 'armor' ? ARMOR_PRICE : id === 'helmet' ? HELMET_PRICE : WEAPONS[id].price;
   if (state.money < price) return;
   if (id === 'grenade') {
     if (arsenal.state.grenades >= 2) return;
@@ -278,13 +299,16 @@ function buyItem(id) {
   } else if (id === 'armor') {
     if (player.armor >= 50) return;
     player.armor = 50;
+  } else if (id === 'helmet') {
+    if (player.helmet) return;
+    player.helmet = true;
   } else if (!arsenal.buy(id)) {
     return;
   }
   state.money -= price;
   audio.buy();
   hud.markBought(id);
-  if (id !== 'grenade' && id !== 'smoke' && id !== 'armor') arsenal.select(id);
+  if (id !== 'grenade' && id !== 'smoke' && id !== 'armor' && id !== 'helmet') arsenal.select(id);
   hud.setMoney(state.money);
   hud.setWeapon(arsenal.def().name, arsenal.state.grenades, arsenal.state.smokes);
 }
@@ -294,7 +318,10 @@ function startRound() {
   const survived = player.alive && match.state.round > 1;
   match.startRound();
   player.hp = 100;
-  if (!survived) player.armor = 0;
+  if (!survived) {
+    player.armor = 0;
+    player.helmet = false;
+  }
   player.alive = true;
   spectateBot = null;
   playerMover.place(world.spawns.atk[1].x, world.spawns.atk[1].z, 0);
@@ -304,7 +331,7 @@ function startRound() {
   bots.resetRound();
   buyOpen = false;
   hud.showBuy(false);
-  hud.setHealth(player.hp, player.armor);
+  hud.setHealth(player.hp, player.armor, player.helmet);
   hud.setAmmo(arsenal.items.pistol.mag, arsenal.items.pistol.reserve);
   hud.setWeapon(arsenal.def().name, arsenal.state.grenades, arsenal.state.smokes);
   hud.setMoney(match.state.money);
@@ -345,7 +372,20 @@ hud.onPlay(() => {
       startRound();
     }
   }
-  input.requestLock();
+  // THE touch fix: pointer lock does not exist on phones, so a tap on any
+  // overlay button must hide the overlay and start WITHOUT a lock. Before this
+  // fix the overlay only hid from onLockChange, which never fires on touch —
+  // the "You are down" screen covered the game forever. Desktop is unchanged:
+  // the lock still gates the overlay there.
+  if (touch.active) {
+    started = true;
+    audio.unlock();
+    hud.hideOverlay();
+    hud.showBuy(false);
+    buyOpen = false;
+  } else {
+    input.requestLock();
+  }
 });
 
 function step(dt) {
@@ -388,9 +428,12 @@ function step(dt) {
   // Player movement, only while alive and the round is live.
   const live = (state.phase === 'live' || state.phase === 'planted') && player.alive;
   if (live) {
+    // Touch joystick is analog; the keyboard is digital. Either one drives.
+    const tm = input.state.touchMove;
+    const hasTouchMove = tm && (tm.x !== 0 || tm.y !== 0);
     const inputState = {
-      forward: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
-      strafe: (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
+      forward: hasTouchMove ? -tm.y : (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
+      strafe: hasTouchMove ? tm.x : (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0),
       jump: keys.has('Space'),
       crouch: keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC'),
       sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'),
@@ -409,6 +452,7 @@ function step(dt) {
       if (input.takePressed('Digit4')) buyItem('grenade');
       if (input.takePressed('Digit5')) buyItem('armor');
       if (input.takePressed('Digit6')) buyItem('smoke');
+      if (input.takePressed('Digit7')) buyItem('helmet');
     } else {
       if (input.takePressed('Digit1')) arsenal.select('pistol');
       if (input.takePressed('Digit2')) arsenal.select('rifle');
@@ -441,9 +485,11 @@ function step(dt) {
     }
   }
 
-  // Planting: hold E inside a site while carrying the bomb.
+  // Planting: hold E inside a site while carrying the bomb. On touch the
+  // HOLD TO PLANT button holds E for the player; it only shows in a site.
   if (live && state.phase === 'live' && state.bomb.carried) {
     const site = siteAt(playerMover.state.position);
+    touch.setPlant(!!site);
     if (site && keys.has('KeyE')) {
       plantHold += dt;
       hud.showHint(`PLANTING AT ${site} — ${Math.max(0, PLANT_SECONDS - plantHold).toFixed(1)}s (HOLD E)`);
@@ -461,6 +507,7 @@ function step(dt) {
     }
   } else {
     plantHold = 0;
+    touch.setPlant(false);
     if (state.phase === 'planted') hud.showHint('DEFEND THE BOMB — EMBER IS COMING TO DEFUSE');
     else if (state.phase === 'buy') hud.showHint('PRESS B TO BUY — ROUND STARTS SOON');
     else hud.showHint('');
@@ -503,7 +550,7 @@ function step(dt) {
   }
 
   // HUD: health, ammo, money, timer, score, crosshair, minimap, roster.
-  hud.setHealth(player.hp, player.armor);
+  hud.setHealth(player.hp, player.armor, player.helmet);
   hud.setAmmo(arsenal.items[arsenal.state.current].mag, arsenal.items[arsenal.state.current].reserve);
   hud.setMoney(state.money);
   hud.setRoster(bots.list);
@@ -662,13 +709,17 @@ window.__dustline = {
   state() {
     return {
       phase: match.state.phase,
+      phaseTime: match.state.phaseTime,
       timer: match.state.timer,
       round: match.state.round,
       score: { ...match.state.score },
       money: match.state.money,
       hp: player.hp,
       armor: player.armor,
+      helmet: player.helmet,
       alive: player.alive,
+      spectating: !player.alive && spectateBot ? spectateBot.name : null,
+      touch: touch.active,
       pos: [playerMover.state.position.x, playerMover.state.position.y, playerMover.state.position.z],
       yaw: playerMover.state.yaw,
       pitch: playerMover.state.pitch,
@@ -717,6 +768,20 @@ window.__dustline = {
   },
   buy(id) {
     buyItem(id);
+  },
+  // Test only: shorten the live round clock so a playtest can reach the round
+  // end without waiting out the full 100 s. Never called by the game itself.
+  setTimer(seconds) {
+    match.state.timer = seconds;
+  },
+  // Test only: set the buy-phase money so a playtest can buy every item.
+  setMoney(amount) {
+    match.state.money = amount;
+  },
+  // Test only: run the real damage path (helmet reduction, vest absorption)
+  // with exact numbers, bypassing bot aim randomness.
+  hurt(base, part, headMult) {
+    damagePlayer(base, null, part, headMult);
   },
   throwSmoke() {
     if (arsenal.state.smokes <= 0) return false;

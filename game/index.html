@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>DUSTLINE — a tactical FPS on three.js</title>
 <style>
   /* Look plan: dusk canvas, warm sand, ember accent. Every colour is a palette name. */
@@ -250,6 +250,8 @@
     top: 50%;
     transform: translate(-50%, -50%);
     width: min(480px, calc(100% - 48px));
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
     padding: 24px;
     background: var(--surface);
     border: 1px solid var(--hairline);
@@ -294,6 +296,78 @@
   @media (prefers-reduced-motion: reduce) {
     #hitmarker, #play, #damage-flash.on { transition-duration: 0.01ms; animation-duration: 0.01ms; }
   }
+
+  /* Touch controls: built by src/touch.js, shown only on touch devices. The
+     button cluster sits bottom-right; the HUD readouts move up on touch so the
+     cluster never covers them. */
+  #touch-ui { position: fixed; inset: 0; z-index: 3; pointer-events: none; touch-action: none; }
+  #touch-ui[hidden] { display: none; }
+  #touch-ui.menus-open { display: none; }
+  #touch-stick {
+    position: absolute; display: none; width: 112px; height: 112px; margin: -56px 0 0 -56px;
+    border: 2px solid rgba(240, 232, 216, 0.5); border-radius: 50%; background: rgba(20, 17, 14, 0.35);
+  }
+  #touch-stick.on { display: block; }
+  #touch-knob {
+    position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px;
+    border-radius: 50%; background: rgba(240, 232, 216, 0.75);
+  }
+  #touch-btns {
+    position: absolute; right: 12px; bottom: 16px; display: grid;
+    grid-template-columns: 48px 48px 48px 84px; grid-template-rows: 48px 48px 48px; gap: 8px;
+    pointer-events: none;
+  }
+  .touch-btn {
+    pointer-events: auto; width: 100%; height: 100%; padding: 0;
+    border: 1px solid var(--hairline); border-radius: 50%;
+    background: rgba(43, 36, 30, 0.78); color: var(--ink);
+    font: 600 11px var(--font-ui); letter-spacing: 0.02em; touch-action: none;
+  }
+  .touch-btn.on { background: var(--accent); border-color: var(--accent); color: var(--canvas); }
+  #touch-buy { grid-column: 1; grid-row: 1; }
+  #touch-crouch { grid-column: 2; grid-row: 1; }
+  #touch-ads { grid-column: 3; grid-row: 1; }
+  #touch-swap { grid-column: 1; grid-row: 2; }
+  #touch-reload { grid-column: 2; grid-row: 2; }
+  #touch-frag { grid-column: 3; grid-row: 2; }
+  #touch-smoke { grid-column: 1; grid-row: 3; }
+  #touch-jump { grid-column: 2; grid-row: 3; }
+  #touch-fire { grid-column: 4; grid-row: 1 / 4; font-size: 14px; border-color: var(--accent); }
+  #touch-plant {
+    position: absolute; left: 50%; bottom: 250px; transform: translateX(-50%);
+    width: auto; height: auto; padding: 12px 20px; border-radius: var(--radius-control);
+    font-size: 14px; background: var(--accent); border-color: var(--accent); color: var(--canvas);
+  }
+  #touch-plant[hidden] { display: none; }
+  body.touch #ammo { right: 16px; bottom: 196px; }
+  body.touch #health { left: 16px; bottom: 196px; width: 180px; }
+  body.touch #hint { bottom: 250px; }
+  body.touch #minimap { width: 120px; height: 88px; }
+  body.touch .buy-row { padding: 14px 12px; }
+
+  /* Small screens: the death / round panels stay compact so the game behind
+     them is still visible, and the help list goes single column. */
+  @media (max-width: 640px) {
+    .panel { padding: 20px; }
+    .panel h1 { font-size: 24px; }
+    .panel p { font-size: 14px; margin-bottom: 16px; }
+    .keys { grid-template-columns: 1fr; }
+    #minimap { width: 120px; height: 88px; }
+  }
+
+  /* Short screens (a phone held landscape): the 7-row buy menu must fit, so
+     rows and headers shrink instead of pushing the Close button off-screen.
+     The body.touch selector is repeated here on purpose: the base touch rule
+     (14px row padding) has higher specificity than a bare .buy-row, so the
+     short-screen override needs the same selector to win. */
+  @media (max-height: 500px) {
+    #buy-menu { padding: 10px 12px; }
+    #buy-menu h2 { font-size: 15px; margin-bottom: 1px; }
+    #buy-menu p { font-size: 12px; margin-bottom: 6px; }
+    #buy-items { gap: 3px; }
+    .buy-row, body.touch .buy-row { padding: 5px 10px; }
+    #buy-close { margin-top: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -326,8 +400,9 @@
 
 <div id="buy-menu" hidden>
   <h2>Buy — <span id="buy-money">$800</span></h2>
-  <p>Buy phase. Press 1–6 or click. B closes.</p>
+  <p>Buy phase. Press 1–7 or tap a row. Close to go back.</p>
   <div id="buy-items"></div>
+  <button id="buy-close" type="button" class="buy-row" style="margin-top: 8px; justify-content: center;">Close — back to the round</button>
 </div>
 
 <div id="overlay" class="overlay">
@@ -335,7 +410,7 @@
     <h1 id="overlay-title">DUSTLINE</h1>
     <p id="overlay-copy">A freight yard at dusk. Plant the bomb at A or B, or clear the Ember team — first to 5 rounds takes the yard.</p>
     <button id="play" type="button">Click to play</button>
-    <ul class="keys">
+    <ul class="keys" id="desktop-keys">
       <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</li>
       <li><kbd>Mouse</kbd> Look</li>
       <li><kbd>Click</kbd> Fire</li>
@@ -349,6 +424,20 @@
       <li><kbd>Ctrl</kbd> Crouch</li>
       <li><kbd>Shift</kbd> Sprint</li>
       <li><kbd>Space</kbd> Jump</li>
+    </ul>
+    <ul class="keys" id="touch-keys" hidden>
+      <li><kbd>Stick</kbd> Move (left thumb)</li>
+      <li><kbd>Drag</kbd> Look (right thumb)</li>
+      <li><kbd>FIRE</kbd> Shoot</li>
+      <li><kbd>ADS</kbd> Aim down sights</li>
+      <li><kbd>RLD</kbd> Reload</li>
+      <li><kbd>SWAP</kbd> Next weapon</li>
+      <li><kbd>FRAG</kbd> Throw grenade</li>
+      <li><kbd>SMOKE</kbd> Throw smoke</li>
+      <li><kbd>BUY</kbd> Buy menu</li>
+      <li><kbd>JUMP</kbd> Jump</li>
+      <li><kbd>CROUCH</kbd> Crouch (tap to toggle)</li>
+      <li><kbd>PLANT</kbd> Hold to plant, inside a site</li>
     </ul>
   </section>
 </div>

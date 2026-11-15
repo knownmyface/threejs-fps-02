@@ -52,7 +52,19 @@ export function createInput(canvas, onLockChange) {
   return {
     state,
     requestLock() {
-      canvas.requestPointerLock();
+      // Pointer lock does not exist on touch devices: a failed request must be a
+      // silent no-op, never an uncaught rejection that leaves the game stuck.
+      try {
+        const result = canvas.requestPointerLock();
+        if (result && typeof result.catch === 'function') result.catch(() => {});
+      } catch (_) {
+        // No pointer lock on this device; the touch path starts without it.
+      }
+    },
+    // Inject an edge-triggered press (grenade, buy, weapon keys) from touch
+    // buttons, through the same path the keyboard uses.
+    press(code) {
+      pressed.add(code);
     },
     takeLook() {
       const x = state.lookX;

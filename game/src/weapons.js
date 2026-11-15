@@ -29,7 +29,11 @@ export const WEAPONS = {
 
 export const GRENADE_PRICE = 300;
 export const SMOKE_PRICE = 400;
-export const ARMOR_PRICE = 600;
+export const ARMOR_PRICE = 650;
+export const HELMET_PRICE = 350;
+// A helmet turns a head shot's multiplier down to this: the same rifle head
+// shot that deals 3x damage deals 1.25x through a helmet.
+export const HELMET_HEAD_MULT = 1.25;
 
 function buildViewModel(id) {
   const grip = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.7, metalness: 0.2 });
