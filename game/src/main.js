@@ -83,6 +83,7 @@ if (touch.active) {
   document.getElementById('desktop-keys').hidden = true;
   document.getElementById('touch-keys').hidden = false;
 }
+arsenal.setTouch(touch.active);
 document.getElementById('buy-close').addEventListener('click', () => input.press('KeyB'));
 const raycaster = new THREE.Raycaster();
 raycaster.far = 120;
@@ -455,7 +456,7 @@ function shoot(spread) {
   shotsFired += 1;
   bloom = Math.min(0.02, bloom + 0.0035);
   camera.getWorldDirection(direction);
-  camera.localToWorld(muzzleWorld.set(0.24, -0.18, -0.95));
+  camera.localToWorld(muzzleWorld.copy(arsenal.state.muzzle));
   const pellets = def.pellets || 1;
   let anyHit = false;
   scene.updateMatrixWorld(true);
@@ -739,7 +740,7 @@ function step(dt) {
     }
   }
 
-  arsenal.step(dt);
+  arsenal.step(dt, aiming);
   grenades.step(dt);
   smoke.step(dt);
   lobbed.step(dt);
@@ -877,7 +878,7 @@ function runShot(name) {
     settle(100);
     aimAt(new THREE.Vector3(-15.5, 1.3, -10));
     shoot(0);
-    arsenal.step(0);
+    arsenal.step(0, false);
   } else if (name === 'end') {
     match.state.score.atk = 1;
     match.state.score.def = 0;

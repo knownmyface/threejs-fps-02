@@ -42,16 +42,16 @@ function buildViewModel(id) {
   const wood = new THREE.MeshStandardMaterial({ color: new THREE.Color('#8a5a28'), roughness: 0.7, metalness: 0 });
   const model = new THREE.Group();
   const part = (mat, w, h, d, x, y, z) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w * 1.8, h * 1.8, d), mat);
+    m.position.set(x * 1.8, y * 1.8, z);
     model.add(m);
     return m;
   };
   if (id === 'knife') {
-    const blade = part(steel, 0.015, 0.05, 0.3, 0, 0.01, -0.2);
+    const blade = part(steel, 0.015, 0.03, 0.45, 0, 0.01, -0.28);
     blade.rotation.x = -0.15;
-    part(grip, 0.03, 0.05, 0.12, 0, -0.01, 0.02);
-    model.position.set(0.22, -0.22, -0.38);
+    part(grip, 0.03, 0.07, 0.16, 0, -0.01, 0.02);
+    model.position.set(0.22, -0.24, -0.65);
   } else if (id === 'pistol' || id === 'p250' || id === 'deagle' || id === 'tec9' || id === 'dualies') {
     const len = id === 'deagle' ? 0.3 : id === 'tec9' ? 0.26 : 0.22;
     part(body, 0.05, 0.06, len, 0, 0, -0.05);
@@ -62,29 +62,29 @@ function buildViewModel(id) {
     }
     if (id === 'deagle') part(accent, 0.052, 0.02, 0.1, 0, 0.035, -0.12);
     if (id === 'tec9') part(accent, 0.05, 0.05, 0.06, 0, 0.02, -0.18);
-    model.position.set(0.2, -0.2, -0.36);
+    model.position.set(0.22, -0.24, -0.63);
   } else if (id === 'nova' || id === 'xm1014') {
     part(body, 0.09, 0.1, 0.42, 0, 0, 0);
     part(grip, 0.05, 0.05, 0.5, 0, 0.02, -0.4);
     part(accent, 0.07, 0.07, 0.14, 0, -0.03, -0.28);
     part(grip, 0.06, 0.08, 0.2, 0, -0.02, 0.3);
     if (id === 'xm1014') part(accent, 0.05, 0.14, 0.06, 0, -0.11, 0);
-    model.position.set(0.24, -0.2, -0.44);
+    model.position.set(0.24, -0.24, -0.71);
   } else if (id === 'smg' || id === 'p90' || id === 'mac10') {
     part(body, 0.08, 0.09, 0.3, 0, 0, 0);
     part(grip, 0.04, 0.04, 0.22, 0, 0.02, -0.25);
     part(accent, 0.05, id === 'p90' ? 0.1 : 0.16, 0.06, 0, -0.11, -0.02);
     if (id === 'p90') part(body, 0.09, 0.05, 0.34, 0, 0.06, -0.02);
-    model.position.set(0.22, -0.2, -0.4);
+    model.position.set(0.24, -0.24, -0.67);
   } else if (id === 'sniper' || id === 'awp' || id === 'sg553') {
     part(body, 0.07, 0.09, 0.5, 0, 0, 0);
     part(grip, 0.035, 0.035, id === 'awp' ? 0.65 : 0.55, 0, 0.02, -0.5);
-    const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 12), accent);
+    const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.16, 12), accent);
     scope.rotation.x = Math.PI / 2;
-    scope.position.set(0, 0.08, -0.05);
+    scope.position.set(0, 0.11, -0.05);
     model.add(scope);
     part(grip, 0.06, 0.07, 0.2, 0, -0.02, 0.32);
-    model.position.set(0.24, -0.21, -0.46);
+    model.position.set(0.24, -0.24, -0.73);
   } else {
     part(body, 0.09, 0.1, 0.42, 0, 0, 0);
     part(grip, 0.045, 0.045, 0.4, 0, 0.025, -0.38);
@@ -92,8 +92,9 @@ function buildViewModel(id) {
     part(accent, 0.02, 0.05, 0.06, 0, 0.07, -0.1);
     if (id === 'm4') part(accent, 0.04, 0.12, 0.05, 0, -0.1, 0.05);
     if (id === 'ak47') part(wood, 0.05, 0.1, 0.06, 0, -0.09, 0.08);
-    model.position.set(0.24, -0.2, -0.42);
+    model.position.set(0.24, -0.24, -0.69);
   }
+  model.rotation.y = 0.35;
   model.userData.baseZ = model.position.z;
   return model;
 }
@@ -121,25 +122,35 @@ export function createArsenal(camera, audio) {
   for (const id of Object.keys(WEAPONS)) {
     items[id] = { mag: WEAPONS[id].mag, reserve: WEAPONS[id].reserve, owned: id === 'pistol' || id === 'knife' };
   }
-  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, smokes: 0, flashes: 0, molotovs: 0, decoys: 0, grenadeSel: 'grenade', scoped: false, swing: 0, primarySlot: null, secondarySlot: 'pistol' };
+  const state = { current: 'pistol', cooldown: 0, reloadLeft: 0, flash: 0, kick: 0, grenades: 0, smokes: 0, flashes: 0, molotovs: 0, decoys: 0, grenadeSel: 'grenade', scoped: false, swing: 0, primarySlot: null, secondarySlot: 'pistol', touch: false, muzzle: new THREE.Vector3() };
   models.pistol.visible = true;
 
   function def() {
     return WEAPONS[state.current];
   }
 
-  function step(dt) {
+  function step(dt, aiming) {
     state.cooldown = Math.max(0, state.cooldown - dt);
     state.flash = Math.max(0, state.flash - dt);
     state.swing = Math.max(0, state.swing - dt);
     state.kick += (0 - state.kick) * Math.min(1, dt * 14);
     const model = models[state.current];
-    model.position.z = model.userData.baseZ + state.kick;
+    const k = Math.min(1, dt * 12);
+    const tx = aiming ? 0 : (state.touch ? -0.02 : 0.22);
+    const ty = aiming ? -0.1 : -0.24;
+    model.position.x += (tx - model.position.x) * k;
+    model.position.y += (ty - model.position.y) * k;
+    model.position.z += (model.userData.baseZ + state.kick - (aiming ? 0.05 : 0) - model.position.z) * k;
+    model.rotation.y += ((aiming ? 0 : 0.35) - model.rotation.y) * k;
     model.rotation.x = state.kick * 2.2;
+    model.visible = !(aiming && def().adsFov <= 30);
+    flash.position.set(model.position.x - 0.2, model.position.y + 0.03, model.position.z - 0.55);
+    flashLight.position.set(model.position.x, model.position.y + 0.15, model.position.z + 0.45);
+    state.muzzle.set(model.position.x - 0.2, model.position.y + 0.03, model.position.z - 0.55);
     model.rotation.z = state.swing > 0 ? -state.swing * 4 : 0;
     flash.visible = state.flash > 0;
     flash.rotation.z = state.flash * 30;
-    flashLight.intensity = state.flash > 0 ? 18 : 0;
+    flashLight.intensity = state.flash > 0 ? 18 : 2;
     if (state.reloadLeft > 0) {
       state.reloadLeft = Math.max(0, state.reloadLeft - dt);
       model.rotation.x = -0.55 * Math.min(1, (def().reloadTime - state.reloadLeft) * 2);
@@ -158,6 +169,7 @@ export function createArsenal(camera, audio) {
     items,
     def,
     step,
+    setTouch(v) { state.touch = !!v; },
     ready() {
       const item = items[state.current];
       return item.mag > 0 && state.cooldown === 0 && state.reloadLeft === 0;
