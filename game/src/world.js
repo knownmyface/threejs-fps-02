@@ -1,12 +1,6 @@
-// The map: DUSTLINE, a freight yard at dusk. 44 x 32 m, two bomb sites (A west, B east),
-// a mid lane and two side lanes, containers and crates for cover, and a raised steel
-// walkway along the west wall with a stair run — the yard's one high ground, reached by
-// the mover's step-up. Every box is a collider for movement and a surface a bullet
-// stops on. Plain geometry only, no models, no textures except two canvas-drawn site
-// letters and a canvas gradient sky made at runtime.
+// DUSTLINE map: freight yard at dusk, 44x32 m, two sites, walkway high ground.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
-
 function skyTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 1024;
@@ -39,7 +33,6 @@ function skyTexture() {
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
-
 function canvasTexture(size, draw, repeat) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -55,40 +48,54 @@ function canvasTexture(size, draw, repeat) {
   texture.anisotropy = 4;
   return texture;
 }
-
 function groundTexture() {
   return canvasTexture(512, (x, s) => {
-    x.fillStyle = '#6e5b45';
+    const R = Math.random;
+    x.fillStyle = '#241c14';
     x.fillRect(0, 0, s, s);
-    const cell = s / 8;
-    for (let i = 0; i < 8; i += 1) {
-      for (let j = 0; j < 8; j += 1) {
-        const v = 0.85 + Math.random() * 0.3;
-        x.fillStyle = `rgb(${Math.floor(110 * v)},${Math.floor(91 * v)},${Math.floor(69 * v)})`;
-        x.fillRect(i * cell + 2, j * cell + 2, cell - 4, cell - 4);
+    const rh = s / 8;
+    for (let j = 0; j < 8; j += 1) {
+      let px = (j % 2 ? -34 : 0) - R() * 20;
+      while (px < s) {
+        const w = 70 + R() * 60;
+        const v = 0.8 + R() * 0.45;
+        x.fillStyle = `rgb(${Math.floor(122 * v)},${Math.floor(102 * v)},${Math.floor(78 * v)})`;
+        x.fillRect(px + 2, j * rh + 2, w - 4, rh - 4);
+        x.fillStyle = 'rgba(255,235,200,0.1)';
+        x.fillRect(px + 2, j * rh + 2, w - 4, 3);
+        x.fillStyle = 'rgba(20,12,8,0.25)';
+        x.fillRect(px + 2, (j + 1) * rh - 5, w - 4, 3);
+        for (let k = 0; k < 14; k += 1) {
+          x.fillStyle = `rgba(30,22,14,${0.1 + R() * 0.2})`;
+          x.fillRect(px + 4 + R() * (w - 8), j * rh + 4 + R() * (rh - 8), 1 + R() * 2, 1 + R() * 2);
+        }
+        px += w;
       }
     }
-    for (let i = 0; i < 40; i += 1) {
-      x.fillStyle = `rgba(30,22,16,${0.08 + Math.random() * 0.15})`;
+    for (let i = 0; i < 7; i += 1) {
+      let cx = R() * s;
+      let cy = R() * s;
+      x.strokeStyle = 'rgba(25,16,10,0.5)';
+      x.lineWidth = 1.5;
       x.beginPath();
-      x.arc(Math.random() * s, Math.random() * s, 6 + Math.random() * 26, 0, Math.PI * 2);
-      x.fill();
+      x.moveTo(cx, cy);
+      for (let k = 0; k < 5; k += 1) {
+        cx += (R() - 0.5) * 50;
+        cy += (R() - 0.5) * 50;
+        x.lineTo(cx, cy);
+      }
+      x.stroke();
     }
-    x.strokeStyle = 'rgba(30,22,16,0.5)';
-    x.lineWidth = 3;
-    for (let i = 0; i <= 8; i += 1) {
-      x.beginPath();
-      x.moveTo(i * cell, 0);
-      x.lineTo(i * cell, s);
-      x.stroke();
-      x.beginPath();
-      x.moveTo(0, i * cell);
-      x.lineTo(s, i * cell);
-      x.stroke();
+    for (let i = 0; i < 10; i += 1) {
+      const bx = R() * s;
+      const by = R() * s;
+      for (let k = 0; k < 12; k += 1) {
+        x.fillStyle = `rgba(25,18,12,${0.05 + R() * 0.1})`;
+        x.fillRect(bx + (R() - 0.5) * 46, by + (R() - 0.5) * 30, 3 + R() * 8, 2 + R() * 6);
+      }
     }
   }, [9, 7]);
 }
-
 function containerTexture(base, label) {
   return canvasTexture(256, (x, s) => {
     x.fillStyle = base;
@@ -110,7 +117,6 @@ function containerTexture(base, label) {
     x.fillText(label, s / 2, s / 2);
   });
 }
-
 function wallTexture() {
   return canvasTexture(256, (x, s) => {
     x.fillStyle = '#2b241e';
@@ -135,7 +141,6 @@ function wallTexture() {
     }
   }, [4, 1]);
 }
-
 function woodTexture() {
   return canvasTexture(256, (x, s) => {
     x.fillStyle = '#8a6a42';
@@ -165,7 +170,6 @@ function woodTexture() {
     x.strokeRect(3, 3, s - 6, s - 6);
   });
 }
-
 function signTexture(text, sub) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
@@ -184,7 +188,6 @@ function signTexture(text, sub) {
   t.anisotropy = 4;
   return t;
 }
-
 function siteTexture(letter) {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -205,11 +208,9 @@ function siteTexture(letter) {
   texture.anisotropy = 4;
   return texture;
 }
-
 export function createWorld(scene) {
   const group = new THREE.Group();
   scene.add(group);
-
   const materials = {};
   for (const name of Object.keys(PALETTE)) {
     materials[name] = new THREE.MeshStandardMaterial({
@@ -226,10 +227,8 @@ export function createWorld(scene) {
   const containerAccentMat = new THREE.MeshStandardMaterial({ map: containerTexture('#c96a2e', 'DUSTLINE'), roughness: 0.8, metalness: 0.15 });
   const containerDarkMat = new THREE.MeshStandardMaterial({ map: containerTexture('#3a322a', 'A-07'), roughness: 0.85, metalness: 0.1 });
   const barrelMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#6a4a2a'), roughness: 0.8, metalness: 0.3 });
-
   const colliders = [];
   const shootables = [];
-
   function box(width, height, depth, x, y, z, material) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), typeof material === 'string' ? materials[material] : material);
     mesh.position.set(x, y, z);
@@ -240,7 +239,6 @@ export function createWorld(scene) {
     shootables.push(mesh);
     return mesh;
   }
-
   function barrel(x, z) {
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 12), barrelMat);
     mesh.position.set(x, 0.55, z);
@@ -251,16 +249,13 @@ export function createWorld(scene) {
     shootables.push(mesh);
     return mesh;
   }
-
   box(44.4, 0.4, 32.4, 0, -0.2, 0, groundMat);
   box(0.4, 5, 32.4, -22.2, 2.5, 0, wallMat);
   box(0.4, 5, 32.4, 22.2, 2.5, 0, wallMat);
   box(44.4, 5, 0.4, 0, 2.5, -16.2, wallMat);
   box(44.4, 5, 0.4, 0, 2.5, 16.2, wallMat);
-
   box(0.4, 3, 8, -10, 1.5, 0, wallMat);
   box(0.4, 3, 8, 10, 1.5, 0, wallMat);
-
   box(6, 2.6, 2.6, -18.5, 1.3, -10, containerAccentMat);
   box(2.6, 2.6, 6, -13, 1.3, -12.5, containerDarkMat);
   box(6, 2.6, 2.6, 18.5, 1.3, -10, containerAccentMat);
@@ -268,7 +263,6 @@ export function createWorld(scene) {
   box(4, 2.6, 2.6, 0, 1.3, 2, containerDarkMat);
   box(2.6, 5.2, 2.6, -6, 2.6, -8, wallMat);
   box(2.6, 5.2, 2.6, 6, 2.6, -8, wallMat);
-
   box(1.2, 1.2, 1.2, -14, 0.6, 6, woodMat);
   box(1.2, 1.2, 1.2, 14, 0.6, 6, woodMat);
   box(1.2, 1.2, 1.2, -9, 0.6, -6, woodMat);
@@ -279,8 +273,6 @@ export function createWorld(scene) {
   box(0.9, 0.9, 0.9, 3, 0.45, 8, woodMat);
   box(0.9, 0.9, 0.9, -3, 0.45, -4, woodMat);
   box(0.9, 0.9, 0.9, 3, 0.45, -4, woodMat);
-
-  // standing player (eye 1.6) can shoot over them — the jiggle-peek mechanic.
   box(2.2, 1.1, 0.4, -5, 0.55, 4, wallMat);
   box(2.2, 1.1, 0.4, 5, 0.55, -4, wallMat);
   barrel(-2.5, 0);
@@ -291,8 +283,6 @@ export function createWorld(scene) {
   box(1.2, 1.35, 1.2, 5, 0.675, -2, woodMat);
   box(1.2, 1.35, 1.2, -10.5, 0.675, -5.5, woodMat);
   box(1.2, 1.35, 1.2, 10.5, 0.675, -5.5, woodMat);
-
-  // Enterable rooms, one at each site: a roofed bay with a door on the north wall
   function room(cx, letter) {
     box(0.4, 3, 4, cx - 3.2, 1.5, -5, wallMat);
     box(0.4, 3, 4, cx + 3.2, 1.5, -5, wallMat);
@@ -327,7 +317,6 @@ export function createWorld(scene) {
   }
   room(-16, 'A');
   room(16, 'B');
-
   box(2, 0.25, 16, -20.4, 2.475, -6, 'surface');
   for (let stepIndex = 0; stepIndex < 7; stepIndex += 1) {
     const top = 2.6 - (stepIndex + 1) * 0.325;
@@ -354,7 +343,6 @@ export function createWorld(scene) {
   }
   colliders.push(new THREE.Box3(new THREE.Vector3(-19.5, 2.6, -14), new THREE.Vector3(-19.4, 3.55, 2)));
   colliders.push(new THREE.Box3(new THREE.Vector3(-21.4, 2.6, -14.1), new THREE.Vector3(-19.4, 3.55, -13.9)));
-
   const railSteel = new THREE.MeshStandardMaterial({ color: new THREE.Color('#241d17'), roughness: 0.4, metalness: 0.6 });
   for (const trackZ of [4.5, 6.5]) {
     const track = new THREE.Mesh(new THREE.BoxGeometry(44, 0.05, 0.5), railSteel);
@@ -384,7 +372,6 @@ export function createWorld(scene) {
     skylineBox(0.12, 6, 0.12, craneX + 8, 15, -21, 0);
     skylineBox(0.8, 0.8, 0.8, craneX + 8, 11.8, -21, 0);
   }
-
   const skyDome = new THREE.Mesh(
     new THREE.SphereGeometry(110, 24, 16),
     new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false }),
@@ -397,7 +384,6 @@ export function createWorld(scene) {
   sunDisc.position.set(-70, 22, -55);
   sunDisc.lookAt(0, 0, 0);
   scene.add(sunDisc);
-
   function siteMarker(letter, x, z) {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 4.4), letter === 'A' ? siteA : siteB);
     floor.rotation.x = -Math.PI / 2;
@@ -415,7 +401,6 @@ export function createWorld(scene) {
   }
   siteMarker('A', -16, -10);
   siteMarker('B', 16, -10);
-
   const sky = new THREE.HemisphereLight(new THREE.Color('#8a7a68'), new THREE.Color(PALETTE.canvas), 0.9);
   scene.add(sky);
   const sun = new THREE.DirectionalLight(new THREE.Color('#ffb066'), 2.4);
@@ -433,7 +418,6 @@ export function createWorld(scene) {
   const fill = new THREE.DirectionalLight(new THREE.Color('#5a6a8a'), 0.5);
   fill.position.set(10, 12, 12);
   scene.add(fill);
-
   return {
     colliders,
     shootables,

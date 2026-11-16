@@ -1,8 +1,5 @@
 // The DOM HUD: health, armour, ammo, money, timer, score, kill feed and every overlay
-// panel. It never touches the simulation; main.js pushes numbers in and reads the play,
-// buy and restart callbacks out.
 import { WEAPONS, GRENADE_PRICE, SMOKE_PRICE, FLASH_PRICE, MOLOTOV_PRICE, DECOY_PRICE, ARMOR_PRICE, HELMET_PRICE } from './weapons.js';
-
 const COPY = {
   start: {
     title: 'DUSTLINE',
@@ -30,11 +27,9 @@ const COPY = {
     action: 'Play again',
   },
 };
-
 function weaponEntry(id) {
   return { id, label: WEAPONS[id].name, note: WEAPONS[id].note, price: WEAPONS[id].price };
 }
-
 export const BUY_COLUMNS = [
   { name: 'Equipment', items: [
     { id: 'armor', label: 'Kevlar Vest', note: 'absorbs 50% damage', price: ARMOR_PRICE },
@@ -58,7 +53,6 @@ export const BUY_COLUMNS = [
     { id: 'decoy', label: 'Decoy grenade', note: 'fake gunshots', price: DECOY_PRICE },
   ] },
 ];
-
 export function createHud(onBuy, onColumn) {
   const overlay = document.getElementById('overlay');
   const title = document.getElementById('overlay-title');
@@ -88,13 +82,14 @@ export function createHud(onBuy, onColumn) {
   const buyMoney = document.getElementById('buy-money');
   const crosshair = document.getElementById('crosshair');
   const hint = document.getElementById('hint');
+  const radioBar = document.getElementById('radio-bar');
+  let radioTimer = 0;
   const roster = document.getElementById('roster');
   const scoreboard = document.getElementById('scoreboard');
   let hitTimer = 0;
   let last = {};
   let lastRoster = '';
   let lastScoreboard = '';
-
   const itemRows = {};
   const columnEls = [];
   BUY_COLUMNS.forEach((column, columnIndex) => {
@@ -119,13 +114,11 @@ export function createHud(onBuy, onColumn) {
     buyItems.appendChild(col);
     columnEls.push(col);
   });
-
   function setText(element, value, key) {
     if (last[key] === value) return;
     last[key] = value;
     element.textContent = value;
   }
-
   return {
     setHealth(hp, armor, helmet = false) {
       healthFill.style.width = `${Math.max(0, Math.min(100, hp))}%`;
@@ -226,6 +219,12 @@ export function createHud(onBuy, onColumn) {
     showHint(text) {
       hint.textContent = text;
       hint.hidden = !text;
+    },
+    radio(text) {
+      radioBar.innerHTML = `<b>RADIO</b> ${text}`;
+      radioBar.hidden = false;
+      clearTimeout(radioTimer);
+      radioTimer = setTimeout(() => { radioBar.hidden = true; }, 4000);
     },
     showOverlay(mode, data = {}) {
       const text = COPY[mode];

@@ -1,7 +1,4 @@
 // DUSTLINE: boot and the one loop — a fixed 60 Hz simulation feeding a render at the
-// display's rate. Vanguard (you + two bots) attacks; Ember (three bots) defends two bomb
-// sites. ?shot=start|play|buy|end with &seed=N sets up a deterministic frame for a
-// capture, renders it twice, then freezes it and sets window.__shotReady.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { createWorld } from './world.js';
@@ -14,12 +11,10 @@ import { createBots } from './bots.js';
 import { createMatch, BUY_SECONDS, ROUND_SECONDS, PLANT_SECONDS } from './rounds.js';
 import { createHud, BUY_COLUMNS } from './hud.js';
 import { createAudio } from './audio.js';
-
 const FIXED_STEP = 1 / 60;
 const params = new URLSearchParams(window.location.search);
 const shot = params.get('shot');
 const seed = Number.parseInt(params.get('seed') ?? '1', 10) || 1;
-
 function mulberry32(initial) {
   let a = initial;
   return function random() {
@@ -31,20 +26,17 @@ function mulberry32(initial) {
   };
 }
 const random = mulberry32(seed);
-
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('game').appendChild(renderer.domElement);
-
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(PALETTE.canvas);
 scene.fog = new THREE.Fog(new THREE.Color(PALETTE.canvas), 24, 60);
 const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 160);
 scene.add(camera);
-
 const audio = createAudio();
 const world = createWorld(scene);
 const match = createMatch();
@@ -87,7 +79,6 @@ arsenal.setTouch(touch.active);
 document.getElementById('buy-close').addEventListener('click', () => input.press('KeyB'));
 const raycaster = new THREE.Raycaster();
 raycaster.far = 120;
-
 const player = {
   mover: playerMover,
   hp: 100,
@@ -95,7 +86,6 @@ const player = {
   helmet: false,
   alive: true,
 };
-
 let elapsed = 0;
 let started = false;
 let frozen = false;
@@ -111,7 +101,6 @@ let aiming = false;
 let shotsFired = 0;
 let shotsHit = 0;
 let headshots = 0;
-
 const direction = new THREE.Vector3();
 const muzzleWorld = new THREE.Vector3();
 const pelletDir = new THREE.Vector3();
@@ -120,11 +109,9 @@ const tmpFlashB = new THREE.Vector3();
 const tmpHit = new THREE.Vector3();
 const tmpEnd = new THREE.Vector3();
 const explosionMeshes = [];
-
 const grenades = createGrenades(scene, world.colliders, onGrenadeExplode);
 const smoke = createSmoke(scene, world.colliders);
 const lobbed = createLobbed(scene, world.colliders);
-
 const stats = new Map();
 const roundStats = new Map();
 function statEntry(map, id, team) {
@@ -179,11 +166,11 @@ function grenadeCounts() {
   const s = arsenal.state;
   return { frag: s.grenades, flash: s.flashes, smoke: s.smokes, molotov: s.molotovs, decoy: s.decoys, sel: s.grenadeSel };
 }
-
 const botCtx = {
   match,
   player,
   audio,
+  radio: (text) => hud.radio(text),
   random,
   smoke,
   grenades,
@@ -202,7 +189,6 @@ botCtx.onShotFired = (bot, from, to, hitPoint) => {
   if (hitPoint) effects.spark(hitPoint, 0.4);
 };
 initStats();
-
 function syncCamera() {
   if (!player.alive && spectateBot && spectateBot.alive) {
     const s = spectateBot.mover.state;
@@ -218,7 +204,6 @@ function syncCamera() {
     camera.position.y += (random() * 2 - 1) * shake * 0.06;
   }
 }
-
 function aimAt(point) {
   const body = playerMover.state;
   const dx = point.x - body.position.x;
@@ -229,7 +214,6 @@ function aimAt(point) {
   body.pitch = Math.asin(Math.max(-1, Math.min(1, dy / length)));
   syncCamera();
 }
-
 function siteAt(position) {
   for (const name of ['A', 'B']) {
     const site = world.sites[name];
@@ -237,7 +221,6 @@ function siteAt(position) {
   }
   return null;
 }
-
 function damagePlayer(base, attacker, part, headMult = 1) {
   if (shot) return;
   if (!player.alive) return;
@@ -272,7 +255,6 @@ function damagePlayer(base, attacker, part, headMult = 1) {
     hud.killfeed(`<b class="def">${attacker ? attacker.name : 'Ember'}</b> → <b class="atk">You</b>${part === 'head' ? ' <span class="head">HEADSHOT</span>' : ''}`);
   }
 }
-
 function onKill(victim, attacker, part) {
   const killerName = attacker === 'player' ? 'You' : attacker.name;
   const killerClass = attacker === 'player' || attacker.team === 'atk' ? 'atk' : 'def';
@@ -284,12 +266,10 @@ function onKill(victim, attacker, part) {
     audio.hit(true);
   }
 }
-
 function onDefused(bot) {
   match.awardRound('def', `${bot.name} defused the bomb.`);
   audio.defuseBeep();
 }
-
 function onGrenadeExplode(position) {
   audio.explosion();
   shake = 1;
@@ -320,7 +300,6 @@ function onGrenadeExplode(position) {
     if (distance < radius) damagePlayer(Math.round(90 * (1 - distance / radius)), null, 'torso');
   }
 }
-
 function onFlash(position) {
   audio.flashPop();
   effects.spark(position, 1.2);
@@ -351,7 +330,6 @@ function onFlash(position) {
     }
   }
 }
-
 function onDecoyShot(position) {
   audio.shoot(true);
   tmpFlashA.copy(position);
@@ -359,7 +337,6 @@ function onDecoyShot(position) {
   effects.fire(tmpFlashA, tmpFlashB);
   bots.hear(position);
 }
-
 function fireZoneHurt(center, radius, amount) {
   for (const bot of bots.list) {
     if (!bot.alive) continue;
@@ -371,7 +348,6 @@ function fireZoneHurt(center, radius, amount) {
     if (Math.hypot(p.x - center.x, p.z - center.z) < radius) damagePlayer(amount, null, 'torso');
   }
 }
-
 const GRENADE_ORDER = ['grenade', 'flash', 'smoke', 'molotov', 'decoy'];
 function throwSelectedGrenade() {
   const s = arsenal.state;
@@ -399,7 +375,6 @@ function throwSelectedGrenade() {
   hud.setWeapon(arsenal.def().name, grenadeCounts());
   return true;
 }
-
 function cycleGrenade() {
   const s = arsenal.state;
   const owned = GRENADE_ORDER.filter((id) => (id === 'grenade' ? s.grenades : id === 'flash' ? s.flashes : id === 'smoke' ? s.smokes : id === 'molotov' ? s.molotovs : s.decoys) > 0);
@@ -408,7 +383,6 @@ function cycleGrenade() {
   hud.setWeapon(arsenal.def().name, grenadeCounts());
   audio.click();
 }
-
 function meleeAttack() {
   if (!arsenal.ready()) return false;
   arsenal.swing();
@@ -445,7 +419,6 @@ function meleeAttack() {
   bots.hear(camera.position);
   return true;
 }
-
 function shoot(spread) {
   const def = arsenal.def();
   if (def.melee) return meleeAttack();
@@ -496,7 +469,6 @@ function shoot(spread) {
   hud.setAmmo(arsenal.items[arsenal.state.current].mag, arsenal.items[arsenal.state.current].reserve, true);
   return true;
 }
-
 function buyItem(id) {
   const state = match.state;
   if (state.phase !== 'buy') return;
@@ -538,7 +510,6 @@ function buyItem(id) {
   hud.setMoney(state.money);
   hud.setWeapon(arsenal.def().name, grenadeCounts());
 }
-
 function startRound() {
   const survived = player.alive && match.state.round > 1;
   match.startRound();
@@ -569,7 +540,6 @@ function startRound() {
   hud.setScore(match.state.score.atk, match.state.score.def, match.state.round);
   hud.setBomb('BOMB CARRIED — PLANT AT A OR B');
 }
-
 function onLockChange(locked) {
   if (shot) return;
   if (locked) {
@@ -584,7 +554,6 @@ function onLockChange(locked) {
     hud.showOverlay(started ? 'paused' : 'start');
   }
 }
-
 hud.onPlay(() => {
   if (shot) return;
   const state = match.state;
@@ -603,9 +572,7 @@ hud.onPlay(() => {
       startRound();
     }
   }
-  // Hide the overlay on the click itself, not only when pointer lock lands:
   hud.hideOverlay();
-  // THE touch fix: pointer lock does not exist on phones, so a tap on any
   if (touch.active) {
     started = true;
     audio.unlock();
@@ -616,12 +583,10 @@ hud.onPlay(() => {
     input.requestLock();
   }
 });
-
 function step(dt) {
   elapsed += dt;
   const state = match.state;
   const keys = input.state.keys;
-
   const previousPhase = state.phase;
   match.tick(dt);
   if (previousPhase === 'buy' && state.phase === 'live') {
@@ -629,8 +594,6 @@ function step(dt) {
     buyOpen = false;
     hud.setBomb('BOMB CARRIED — PLANT AT A OR B');
   }
-
-  // and the game soft-locked in phase 'end'. Timer/fuse ends already happen
   if (state.phase === 'live' || state.phase === 'planted') {
     if (bots.aliveCount('def') === 0) {
       match.awardRound('atk', 'Ember team eliminated.');
@@ -638,7 +601,6 @@ function step(dt) {
       match.awardRound('def', 'Vanguard team eliminated.');
     }
   }
-
   const live = (state.phase === 'live' || state.phase === 'planted') && player.alive;
   if (live) {
     const tm = input.state.touchMove;
@@ -653,7 +615,6 @@ function step(dt) {
     };
     playerMover.step(dt, inputState);
   }
-
   if (player.alive && (state.phase === 'live' || state.phase === 'planted' || state.phase === 'buy')) {
     if (buyOpen) {
       const digits = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6'];
@@ -705,7 +666,6 @@ function step(dt) {
       }
     }
   }
-
   if (live && state.phase === 'live' && state.bomb.carried) {
     const site = siteAt(playerMover.state.position);
     touch.setPlant(!!site);
@@ -717,6 +677,7 @@ function step(dt) {
         plantHold = 0;
         audio.plantBeep();
         hud.killfeed(`<b class="atk">You</b> planted the bomb at <b>${site}</b>`);
+        hud.radio(`You: Bomb planted at ${site} — defend it`);
         hud.setBomb(`BOMB PLANTED AT ${site} — ${Math.ceil(state.bomb.fuse)}s`);
         bots.hear(world.sites[site].center);
       }
@@ -731,7 +692,6 @@ function step(dt) {
     else if (state.phase === 'buy') hud.showHint('PRESS B TO BUY — ROUND STARTS SOON');
     else hud.showHint('');
   }
-
   if (state.phase === 'planted') {
     if (state.bomb.defuse > 0) {
       hud.setBomb(`DEFUSE IN PROGRESS — ${Math.max(0, 6 - state.bomb.defuse).toFixed(1)}s`);
@@ -739,7 +699,6 @@ function step(dt) {
       hud.setBomb(`BOMB PLANTED AT ${state.bomb.site} — ${Math.max(0, Math.ceil(state.bomb.fuse))}s`);
     }
   }
-
   arsenal.step(dt, aiming);
   grenades.step(dt);
   smoke.step(dt);
@@ -761,7 +720,6 @@ function step(dt) {
     if (document.pointerLockElement) document.exitPointerLock();
   }
   bloom = Math.max(0, bloom - dt * 0.04);
-
   shake = Math.max(0, shake - dt * 2.2);
   for (let index = explosionMeshes.length - 1; index >= 0; index -= 1) {
     const entry = explosionMeshes[index];
@@ -778,7 +736,6 @@ function step(dt) {
       explosionMeshes.splice(index, 1);
     }
   }
-
   hud.setHealth(player.hp, player.armor, player.helmet);
   hud.setAmmo(arsenal.items[arsenal.state.current].mag, arsenal.items[arsenal.state.current].reserve, !arsenal.def().melee);
   hud.setWeapon(arsenal.def().name, grenadeCounts());
@@ -788,12 +745,10 @@ function step(dt) {
   hud.setTimer(timerSeconds, state.phase);
   hud.setScore(state.score.atk, state.score.def, state.round);
   hud.setCrosshairGap(6 + arsenal.spread(playerMover.groundSpeed()) * 900);
-
   const showScore = keys.has('Tab') || scoreboardTouch;
   hud.showScoreboard(showScore);
   if (showScore) hud.setScoreboard(scoreboardRows(), state.score.atk, state.score.def);
 }
-
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min((now - lastTime) / 1000, 0.1);
@@ -833,11 +788,9 @@ function frame(now) {
   }
   renderer.render(scene, camera);
 }
-
 function settle(steps) {
   for (let index = 0; index < steps; index += 1) step(FIXED_STEP);
 }
-
 function runShot(name) {
   hud.hideOverlay();
   hud.showBuy(false);
@@ -894,7 +847,6 @@ function runShot(name) {
   hud.setMoney(match.state.money);
   paintTwiceThenReady();
 }
-
 function paintTwiceThenReady() {
   let painted = 0;
   function paint() {
@@ -909,18 +861,15 @@ function paintTwiceThenReady() {
   }
   requestAnimationFrame(paint);
 }
-
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
-
 startRound();
 syncCamera();
 if (shot) runShot(shot);
 else requestAnimationFrame(frame);
-
 window.__dustline = {
   state() {
     return {
@@ -983,6 +932,7 @@ window.__dustline = {
   fire() {
     if (player.alive && (match.state.phase === 'live' || match.state.phase === 'planted')) shoot(0);
   },
+  radio(text) { hud.radio(text); },
   place(x, z, yaw) {
     playerMover.place(x, z, yaw);
     syncCamera();

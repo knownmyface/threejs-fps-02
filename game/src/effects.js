@@ -1,7 +1,5 @@
-// Effects: pooled tracers, impact sparks and molotov fire zones. Everything is
-// pre-made and reused; nothing allocates per frame.
+// Effects: pooled tracers, sparks, fire zones; nothing allocates per frame.
 import * as THREE from 'three';
-
 export function starTexture() {
   const c = document.createElement('canvas');
   c.width = 128;
@@ -25,18 +23,64 @@ export function starTexture() {
   x.fill();
   return new THREE.CanvasTexture(c);
 }
-
+export function flashTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const x = c.getContext('2d');
+  x.translate(64, 64);
+  x.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 5; i += 1) {
+    const a = i / 5 * 6.283 + .38;
+    const len = 50 + (i % 2) * 14;
+    const g = x.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+    g.addColorStop(0, 'rgba(255,240,200,.95)');
+    g.addColorStop(.5, 'rgba(255,160,60,.8)');
+    g.addColorStop(1, 'rgba(224,80,20,0)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.moveTo(0, 0);
+    x.quadraticCurveTo(Math.cos(a + .38) * len * .5, Math.sin(a + .38) * len * .5, Math.cos(a) * len, Math.sin(a) * len);
+    x.quadraticCurveTo(Math.cos(a - .38) * len * .5, Math.sin(a - .38) * len * .5, 0, 0);
+    x.fill();
+  }
+  const g = x.createRadialGradient(0, 0, 1, 0, 0, 38);
+  g.addColorStop(0, 'rgba(255,255,240,1)');
+  g.addColorStop(.4, 'rgba(255,210,120,.9)');
+  g.addColorStop(1, 'rgba(255,140,40,0)');
+  x.fillStyle = g;
+  x.beginPath();
+  x.arc(0, 0, 38, 0, 6.283);
+  x.fill();
+  return new THREE.CanvasTexture(c);
+}
+export function puffTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(32, 32, 2, 32, 32, 30);
+  g.addColorStop(0, 'rgba(205,195,180,.5)');
+  g.addColorStop(1, 'rgba(205,195,180,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
 export function createEffects(scene) {
-  const tracerGeo = new THREE.CylinderGeometry(0.02, 0.02, 1, 6, 1, true);
-  tracerGeo.rotateX(Math.PI / 2);
+  const coreGeo = new THREE.CylinderGeometry(0.012, 0.012, 1, 6, 1, true);
+  const glowGeo = new THREE.CylinderGeometry(0.035, 0.035, 1, 6, 1, true);
+  coreGeo.rotateX(Math.PI / 2);
+  glowGeo.rotateX(Math.PI / 2);
   const tracers = [];
   for (let i = 0; i < 14; i += 1) {
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffb066'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    const mesh = new THREE.Mesh(tracerGeo, mat);
-    mesh.visible = false;
-    mesh.frustumCulled = false;
-    scene.add(mesh);
-    tracers.push({ mesh, mat, life: 0 });
+    const core = new THREE.Mesh(coreGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff3c4'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const glow = new THREE.Mesh(glowGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff8a30'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+    core.visible = false;
+    glow.visible = false;
+    core.frustumCulled = false;
+    glow.frustumCulled = false;
+    scene.add(core, glow);
+    tracers.push({ core, glow, life: 0 });
   }
   let tracerNext = 0;
   const sparkTex = starTexture();
@@ -51,20 +95,21 @@ export function createEffects(scene) {
   let sparkNext = 0;
   const zones = [];
   const tmp = new THREE.Vector3();
-
   function fire(from, to, color = '#ffb066') {
     const t = tracers[tracerNext];
     tracerNext = (tracerNext + 1) % tracers.length;
     const len = Math.hypot(to.x - from.x, to.y - from.y, to.z - from.z) || 0.01;
-    t.mesh.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2);
-    t.mesh.lookAt(to);
-    t.mesh.scale.set(1, 1, len);
-    t.mat.color.set(color);
-    t.mat.opacity = 0.9;
-    t.mesh.visible = true;
+    for (const m of [t.core, t.glow]) {
+      m.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2);
+      m.lookAt(to);
+      m.scale.set(1, 1, len);
+      m.visible = true;
+    }
+    t.core.material.opacity = 0.95;
+    t.glow.material.color.set(color);
+    t.glow.material.opacity = 0.4;
     t.life = 0.08;
   }
-
   function spark(point, scale = 0.5) {
     const s = sparks[sparkNext];
     sparkNext = (sparkNext + 1) % sparks.length;
@@ -74,7 +119,6 @@ export function createEffects(scene) {
     s.sprite.visible = true;
     s.life = 0.25;
   }
-
   function deployFire(position) {
     const group = new THREE.Group();
     const disc = new THREE.Mesh(new THREE.CircleGeometry(2.5, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color('#e07830'), transparent: true, opacity: 0.55, depthWrite: false }));
@@ -97,13 +141,14 @@ export function createEffects(scene) {
     scene.add(group);
     zones.push({ group, cones, light, center: group.position.clone(), life: 5, tick: 0 });
   }
-
   function step(dt, time, hurt) {
     for (const t of tracers) {
       if (t.life > 0) {
         t.life -= dt;
-        t.mat.opacity = Math.max(0, t.life / 0.08) * 0.9;
-        if (t.life <= 0) t.mesh.visible = false;
+        const f = Math.max(0, t.life / 0.08);
+        t.core.material.opacity = f * 0.95;
+        t.glow.material.opacity = f * 0.4;
+        if (t.life <= 0) { t.core.visible = false; t.glow.visible = false; }
       }
     }
     for (const s of sparks) {
@@ -133,7 +178,6 @@ export function createEffects(scene) {
       }
     }
   }
-
   return {
     fire,
     spark,
@@ -148,7 +192,7 @@ export function createEffects(scene) {
       };
     },
     clear() {
-      for (const t of tracers) { t.life = 0; t.mesh.visible = false; }
+      for (const t of tracers) { t.life = 0; t.core.visible = false; t.glow.visible = false; }
       for (const s of sparks) { s.life = 0; s.sprite.visible = false; }
       for (const z of zones) scene.remove(z.group);
       zones.length = 0;

@@ -1,12 +1,8 @@
-// Bots: two teams that move, see and shoot back. Each bot is a small state machine —
-// patrol a route, hold a lane, engage what it sees, investigate what it hears, and, when
-// the bomb is planted, run to the site and defuse it. Perception is a line-of-sight ray
-// against the world's colliders, so a bot never sees through a wall.
+// Bots: state-machine teams that patrol, engage, investigate, defuse.
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { createMover } from './mover.js';
 import { WEAPONS } from './weapons.js';
-
 const BOT_SPEED = 4.2;
 const ENGAGE_SPEED = 2.8;
 const SEE_DISTANCE = 46;
@@ -14,45 +10,47 @@ const SEE_DISTANCE_CROUCH = 20;
 const HEAR_DISTANCE = 26;
 const BOT_HEALTH = 100;
 const THINK_EVERY = 0.12;
-
 const NAMES = {
   atk: ['Rook', 'Sable'],
   def: ['Vex', 'Hollow', 'Mira'],
 };
-
 const tmpDir = new THREE.Vector3();
 const tmpTarget = new THREE.Vector3();
 const tmpEye = new THREE.Vector3();
 const tmpBox = new THREE.Box3();
 const tmpRay = new THREE.Ray();
 const tmpEnd = new THREE.Vector3();
-
 export function createBots(scene, world, ctx) {
   const raycaster = new THREE.Raycaster();
   raycaster.far = 60;
   const list = [];
   const hitMeshes = [];
   let noise = null;
-
   function buildBody(team) {
     const group = new THREE.Group();
-    const teamColor = team === 'atk' ? PALETTE.teal : PALETTE.ember;
-    const torsoMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(teamColor), roughness: 0.6, metalness: 0.05 });
-    const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.85 });
-    const vestMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(team === 'atk' ? '#1d6a58' : '#a03a2a'), roughness: 0.8 });
+    const atk = team === 'atk';
+    const teamColor = atk ? PALETTE.teal : PALETTE.ember;
+    const torsoMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(atk ? '#2f6fb2' : '#1c1713'), roughness: 0.6, metalness: 0.05 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(atk ? '#232a33' : '#14100d'), roughness: 0.85 });
+    const vestMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(atk ? '#1d4e79' : '#a03a2a'), roughness: 0.8 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(atk ? '#bcd6ea' : '#e2543e'), roughness: 0.5 });
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.78, 0.3), torsoMat);
     torso.position.y = 1.0;
     torso.userData.part = 'torso';
     const vest = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.5, 0.32), vestMat);
     vest.position.y = 1.05;
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.06, 0.34), trimMat);
+    stripe.position.y = atk ? 1.22 : 1.05;
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 10), darkMat);
     head.position.y = 1.53;
     head.userData.part = 'head';
-    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), torsoMat);
-    helmet.position.y = 1.55;
+    const helmet = atk
+      ? new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), torsoMat)
+      : new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.24, 10), darkMat);
+    helmet.position.y = atk ? 1.55 : 1.58;
     helmet.userData.part = 'head';
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: new THREE.Color(teamColor), emissive: new THREE.Color(teamColor), emissiveIntensity: 0.9 }));
-    visor.position.set(0, 1.55, 0.13);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: new THREE.Color(atk ? '#bcd6ea' : '#e2543e'), emissive: new THREE.Color(atk ? '#7fb3d5' : '#e2543e'), emissiveIntensity: 0.9 }));
+    visor.position.set(0, 1.55, 0.16);
     const gun = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.55), darkMat);
     gun.position.set(0.2, 1.05, -0.2);
     const armL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.62, 0.13), torsoMat);
@@ -66,7 +64,14 @@ export function createBots(scene, world, ctx) {
     legR.position.set(0.13, 0.31, 0);
     const marker = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), new THREE.MeshBasicMaterial({ color: new THREE.Color(teamColor) }));
     marker.position.y = 1.95;
-    group.add(torso, vest, head, helmet, visor, gun, armL, armR, legL, legR, marker);
+    group.add(torso, vest, stripe, head, helmet, visor, gun, armL, armR, legL, legR, marker);
+    if (!atk) {
+      for (const sx of [-0.32, 0.32]) {
+        const pad = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.18), vestMat);
+        pad.position.set(sx, 1.38, 0);
+        group.add(pad);
+      }
+    }
     group.traverse((mesh) => {
       if (mesh.isMesh) {
         mesh.castShadow = true;
@@ -75,7 +80,6 @@ export function createBots(scene, world, ctx) {
     });
     return { group, torso, torsoMat, head, helmet, marker };
   }
-
   function makeBot(team, index) {
     const mover = createMover(world.colliders, { walkSpeed: BOT_SPEED });
     const body = buildBody(team);
@@ -124,16 +128,13 @@ export function createBots(scene, world, ctx) {
     list.push(bot);
     return bot;
   }
-
   for (let index = 0; index < 2; index += 1) makeBot('atk', index);
   for (let index = 0; index < 3; index += 1) makeBot('def', index);
-
   function eyePosition(bot, out) {
     const s = bot.mover.state;
     out.set(s.position.x, s.position.y + s.eye, s.position.z);
     return out;
   }
-
   function sees(bot, targetPos, targetCrouching) {
     const s = bot.mover.state;
     eyePosition(bot, tmpEye);
@@ -150,7 +151,6 @@ export function createBots(scene, world, ctx) {
     const blocked = raycaster.intersectObjects(world.shootables, false)[0];
     return !blocked;
   }
-
   function aimAt(bot, point) {
     const s = bot.mover.state;
     eyePosition(bot, tmpEye);
@@ -165,14 +165,12 @@ export function createBots(scene, world, ctx) {
     s.yaw += Math.max(-0.22, Math.min(0.22, delta));
     s.pitch += (Math.asin(Math.max(-1, Math.min(1, dy / length))) - s.pitch) * 0.5;
   }
-
   function playerBox(player) {
     const p = player.mover.state;
     tmpBox.min.set(p.position.x - 0.34, p.position.y, p.position.z - 0.34);
     tmpBox.max.set(p.position.x + 0.34, p.position.y + p.height, p.position.z + 0.34);
     return tmpBox;
   }
-
   function shootAt(bot, target) {
     const def = WEAPONS[bot.weapon];
     if (bot.cooldown > 0 || bot.reloadLeft > 0) return;
@@ -223,7 +221,6 @@ export function createBots(scene, world, ctx) {
     }
     ctx.onShotFired(bot, tmpEye, tmpEnd, hitPoint);
   }
-
   function damage(bot, amount, part, attacker) {
     if (!bot.alive) return false;
     bot.hp -= amount;
@@ -241,7 +238,6 @@ export function createBots(scene, world, ctx) {
     ctx.onKill(bot, attacker, part);
     return true;
   }
-
   function resetRound() {
     const match = ctx.match.state;
     for (const bot of list) {
@@ -284,7 +280,6 @@ export function createBots(scene, world, ctx) {
     });
     noise = null;
   }
-
   function think(bot, time) {
     const match = ctx.match.state;
     if (match.phase === 'buy' || match.phase === 'end') {
@@ -310,7 +305,6 @@ export function createBots(scene, world, ctx) {
     }
     let seen = null;
     let seenDistance = Infinity;
-    // Flashbanged: blind for ~2 s — no seeing, no shooting, stand still.
     if (time < bot.blindUntil) {
       bot.target = null;
       bot.state = 'patrol';
@@ -329,6 +323,10 @@ export function createBots(scene, world, ctx) {
       bot.target = seen;
       bot.lastSeen = seen.aimPoint.clone();
       bot.lastSeenTime = time;
+      if (bot.team === 'atk' && bot.state !== 'engage' && time - (ctx.lastRadio || 0) > 8) {
+        ctx.lastRadio = time;
+        ctx.radio(`${bot.name}: Contact at ${bot.mover.state.position.x < 0 ? 'A' : 'B'}`);
+      }
       bot.state = 'engage';
       return;
     }
@@ -359,7 +357,6 @@ export function createBots(scene, world, ctx) {
     }
     bot.state = bot.team === 'def' ? 'patrol' : 'patrol';
   }
-
   function moveToward(bot, dt, point, speed) {
     const s = bot.mover.state;
     const dx = point.x - s.position.x;
@@ -375,7 +372,6 @@ export function createBots(scene, world, ctx) {
     bot.mover.step(dt, { forward: facing ? 1 : 0, strafe: 0, jump: false, crouch: false });
     return false;
   }
-
   function step(dt, time) {
     for (const bot of list) {
       const s = bot.mover.state;
@@ -402,7 +398,6 @@ export function createBots(scene, world, ctx) {
         bot.thinkTimer = THINK_EVERY + ctx.random() * 0.05;
         think(bot, time);
       }
-
       const fire = ctx.inFire ? ctx.inFire(s.position) : null;
       if (fire) {
         tmpTarget.set(s.position.x - fire.center.x, 0, s.position.z - fire.center.z).normalize();
@@ -494,7 +489,6 @@ export function createBots(scene, world, ctx) {
               }
             }
           } else {
-            // Stuck: wedged on a wall or a stair face, no progress toward the point.
             const moved = Math.hypot(s.position.x - bot.stuckPos.x, s.position.z - bot.stuckPos.z);
             if (moved > 0.3) {
               bot.stuckTimer = 0;
@@ -512,13 +506,11 @@ export function createBots(scene, world, ctx) {
           bot.mover.step(dt, { forward: 0, strafe: 0, jump: false, crouch: false });
         }
       }
-
       bot.body.group.position.set(s.position.x, s.position.y, s.position.z);
       bot.body.group.rotation.y = s.yaw;
       bot.body.marker.rotation.y += dt * 2;
     }
   }
-
   return {
     list,
     hitMeshes,

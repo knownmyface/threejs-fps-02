@@ -1,18 +1,10 @@
 // Touch controls for phones: a floating virtual joystick, drag-to-look, and
-// on-screen action buttons. It drives the SAME input state the keyboard and
-// mouse use (input.state.keys / firing / scoped / lookX / lookY / touchMove),
-// so the simulation never knows or cares which device is playing. The UI is
-// built only on touch devices; on desktop it stays hidden and the pointer-lock
-// flow is untouched. Buttons inject the same edge presses (KeyG/KeyH/KeyB)
-// the keyboard uses, so buy, grenade and smoke behave identically.
 const STICK_RADIUS = 52;
-
 export function createTouch(input, actions) {
   const coarse = window.matchMedia('(pointer: coarse)').matches;
   const touchCapable = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   const active = coarse || touchCapable;
   input.state.touchMove = { x: 0, y: 0 };
-
   const ui = document.createElement('div');
   ui.id = 'touch-ui';
   ui.hidden = !active;
@@ -32,7 +24,6 @@ export function createTouch(input, actions) {
       <button type="button" class="touch-btn" id="touch-fire">FIRE</button>
     </div>`;
   document.body.appendChild(ui);
-
   const stick = ui.querySelector('#touch-stick');
   const knob = ui.querySelector('#touch-knob');
   const plantButton = ui.querySelector('#touch-plant');
@@ -40,18 +31,15 @@ export function createTouch(input, actions) {
   for (const id of ['buy', 'crouch', 'ads', 'swap', 'reload', 'frag', 'smoke', 'jump', 'fire', 'score']) {
     buttons[id] = ui.querySelector(`#touch-${id}`);
   }
-
   let stickId = null;
   let stickBase = { x: 0, y: 0 };
   let lookId = null;
   let lookLast = { x: 0, y: 0 };
   let crouched = false;
-
   function isMenuTarget(target) {
     if (!target || !target.closest) return false;
     return !!target.closest('button, #buy-menu, .overlay, #touch-btns');
   }
-
   function stickVector(dx, dy) {
     const length = Math.hypot(dx, dy) || 1;
     const clamped = Math.min(length, STICK_RADIUS);
@@ -61,7 +49,6 @@ export function createTouch(input, actions) {
     input.state.touchMove.x = nx / STICK_RADIUS;
     input.state.touchMove.y = ny / STICK_RADIUS;
   }
-
   function endStick() {
     stickId = null;
     stick.classList.remove('on');
@@ -69,7 +56,6 @@ export function createTouch(input, actions) {
     input.state.touchMove.x = 0;
     input.state.touchMove.y = 0;
   }
-
   function onTouchStart(event) {
     if (!active) return;
     for (const touch of event.changedTouches) {
@@ -89,7 +75,6 @@ export function createTouch(input, actions) {
       }
     }
   }
-
   function onTouchMove(event) {
     if (!active) return;
     for (const touch of event.changedTouches) {
@@ -104,7 +89,6 @@ export function createTouch(input, actions) {
       }
     }
   }
-
   function onTouchEnd(event) {
     if (!active) return;
     for (const touch of event.changedTouches) {
@@ -112,12 +96,10 @@ export function createTouch(input, actions) {
       if (touch.identifier === lookId) lookId = null;
     }
   }
-
   window.addEventListener('touchstart', onTouchStart, { passive: false });
   window.addEventListener('touchmove', onTouchMove, { passive: false });
   window.addEventListener('touchend', onTouchEnd);
   window.addEventListener('touchcancel', onTouchEnd);
-
   function holdButton(button, down, up) {
     button.addEventListener('touchstart', (event) => {
       event.preventDefault();
@@ -131,7 +113,6 @@ export function createTouch(input, actions) {
     button.addEventListener('touchend', release);
     button.addEventListener('touchcancel', release);
   }
-
   function tapButton(button, action) {
     button.addEventListener('touchstart', (event) => {
       event.preventDefault();
@@ -139,7 +120,6 @@ export function createTouch(input, actions) {
       action();
     }, { passive: false });
   }
-
   holdButton(buttons.fire,
     () => { input.pressFire(); },
     () => { input.releaseFire(); });
@@ -167,7 +147,6 @@ export function createTouch(input, actions) {
   holdButton(plantButton,
     () => { input.state.keys.add('KeyE'); },
     () => { input.state.keys.delete('KeyE'); });
-
   const buyMenu = document.getElementById('buy-menu');
   const overlay = document.getElementById('overlay');
   function syncMenus() {
@@ -176,7 +155,6 @@ export function createTouch(input, actions) {
   new MutationObserver(syncMenus).observe(buyMenu, { attributes: true, attributeFilter: ['hidden'] });
   new MutationObserver(syncMenus).observe(overlay, { attributes: true, attributeFilter: ['hidden'] });
   syncMenus();
-
   return {
     active,
     setPlant(available) {

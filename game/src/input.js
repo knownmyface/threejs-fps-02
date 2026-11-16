@@ -1,12 +1,9 @@
 // Keyboard and mouse, and the pointer lock that turns the mouse into look. Plain browser
-// APIs only: the game asks the canvas for pointer lock and reads movementX/Y while it
-// holds it. Edge-triggered presses (grenade, buy, weapon keys) are consumed once.
 export function createInput(canvas, onLockChange) {
   const keys = new Set();
   const pressed = new Set();
   const state = { keys, locked: false, firing: false, scoped: false, lookX: 0, lookY: 0, touchLookX: 0, touchLookY: 0, mouseSens: 1, touchSens: 1 };
   let firePressed = false;
-
   function setKey(event, down) {
     if (down) {
       if (!keys.has(event.code)) pressed.add(event.code);
@@ -16,7 +13,6 @@ export function createInput(canvas, onLockChange) {
     }
     if (event.code === 'Space' || event.code === 'Tab') event.preventDefault();
   }
-
   window.addEventListener('keydown', (event) => setKey(event, true));
   window.addEventListener('keyup', (event) => setKey(event, false));
   window.addEventListener('blur', () => {
@@ -49,7 +45,6 @@ export function createInput(canvas, onLockChange) {
     }
     onLockChange(state.locked);
   });
-
   return {
     state,
     requestLock() {

@@ -1,6 +1,4 @@
 // The match: rounds, money and the bomb, in one place. The match owns the score, the
-// phase clock and the economy; main.js and the bots read it, nobody else writes it.
-// First to 5 round wins, at most 9 rounds; attackers plant, defenders defuse.
 export const BUY_SECONDS = 12;
 export const ROUND_SECONDS = 100;
 export const FUSE_SECONDS = 35;
@@ -13,7 +11,6 @@ export const KILL_REWARD = 300;
 export const WIN_REWARD = 2000;
 export const LOSS_REWARD = 1400;
 export const PLANT_REWARD = 300;
-
 export function createMatch() {
   const state = {
     round: 1,
@@ -29,7 +26,6 @@ export function createMatch() {
     matchOver: false,
     winner: null,
   };
-
   function startRound() {
     state.phase = 'buy';
     state.phaseTime = BUY_SECONDS;
@@ -37,7 +33,6 @@ export function createMatch() {
     state.bomb = { carried: true, planted: false, site: null, fuse: 0, defuse: 0, defuser: null, plantProgress: 0 };
     state.result = null;
   }
-
   function awardRound(winner, reason) {
     if (state.phase === 'end') return;
     state.score[winner] += 1;
@@ -50,12 +45,10 @@ export function createMatch() {
       state.winner = state.score.atk > state.score.def ? 'atk' : state.score.def > state.score.atk ? 'def' : 'atk';
     }
   }
-
   function nextRound() {
     state.round += 1;
     startRound();
   }
-
   function tick(dt) {
     if (state.phase === 'buy') {
       state.phaseTime -= dt;
@@ -86,7 +79,6 @@ export function createMatch() {
       state.phaseTime -= dt;
     }
   }
-
   return {
     state,
     startRound,

@@ -1,11 +1,8 @@
 // Procedural sound: every effect is synthesised with WebAudio, so the game ships no
-// audio files and makes no network request. The context is created on the first user
-// gesture and every call before that is a silent no-op.
 export function createAudio() {
   let context = null;
   let master = null;
   let noiseBuffer = null;
-
   function ensure() {
     if (context) return true;
     try {
@@ -24,7 +21,6 @@ export function createAudio() {
     }
     return true;
   }
-
   function noise(duration, filterFrequency, gainValue, when = 0) {
     if (!ensure()) return;
     const time = context.currentTime + when;
@@ -40,7 +36,6 @@ export function createAudio() {
     source.start(time, Math.random() * 0.3, duration);
     source.stop(time + duration + 0.02);
   }
-
   function tone(frequency, duration, type, gainValue, slideTo = 0, when = 0) {
     if (!ensure()) return;
     const time = context.currentTime + when;
@@ -55,7 +50,6 @@ export function createAudio() {
     oscillator.start(time);
     oscillator.stop(time + duration + 0.02);
   }
-
   return {
     unlock() {
       if (ensure() && context.state === 'suspended') context.resume();
