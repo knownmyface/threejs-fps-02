@@ -816,20 +816,20 @@ function runShot(name) {
     enemy.mover.place(-12, -6, Math.PI);
     enemy.body.group.position.set(-12, 0, -6);
     const friend = bots.list.find((bot) => bot.team === 'atk');
-    friend.mover.place(-9, 0, 0);
-    friend.body.group.position.set(-9, 0, 0);
+    friend.mover.place(-12, -3.5, 0);
+    friend.body.group.position.set(-12, 0, -3.5);
     settle(20);
     const enemyPoint = (height) => new THREE.Vector3(enemy.mover.state.position.x, height, enemy.mover.state.position.z);
-    aimAt(enemyPoint(1.2));
+    aimAt(new THREE.Vector3(-13, 1.2, -6));
     shoot(0);
     settle(8);
-    aimAt(enemyPoint(1.53));
+    aimAt(enemyPoint(1.0));
     shoot(0);
     settle(12);
     camera.getWorldDirection(direction);
     smoke.throwFrom(camera.position, direction);
-    settle(100);
-    aimAt(new THREE.Vector3(-15.5, 1.3, -10));
+    settle(25);
+    aimAt(new THREE.Vector3(-12, 1.3, -4.75));
     shoot(0);
     arsenal.step(0, false);
   } else if (name === 'end') {
